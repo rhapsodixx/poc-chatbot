@@ -21,7 +21,6 @@ from app.config import get_settings
 from app.services.vectorstore import get_chroma_client, get_collection, delete_by_url, get_all_urls
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
 # ── Data Models ──────────────────────────────────────────────
@@ -37,6 +36,8 @@ class PageContent:
     meta_description: str = ""
     page_type: str = "general"
     image_url: str = ""
+    lastmod: str = ""
+    content_hash: str = ""
 
 
 @dataclass
@@ -57,8 +58,8 @@ class TextChunk:
 # ── Step 1: Sitemap Parser ───────────────────────────────────
 
 
-async def fetch_sitemap(sitemap_url: str) -> list[str]:
-    """Fetch and parse a sitemap.xml to extract all page URLs.
+async def fetch_sitemap(sitemap_url: str) -> dict[str, str]:
+    """Fetch and parse a sitemap.xml to extract all page URLs and their lastmod.
 
     Supports nested sitemaps (sitemap index files).
 
@@ -66,9 +67,9 @@ async def fetch_sitemap(sitemap_url: str) -> list[str]:
         sitemap_url: URL to the sitemap.xml file.
 
     Returns:
-        List of discovered page URLs.
+        Dict mapping discovered page URLs to their lastmod timestamps.
     """
-    urls: list[str] = []
+    urls: dict[str, str] = {}
     namespaces = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
@@ -82,19 +83,31 @@ async def fetch_sitemap(sitemap_url: str) -> list[str]:
     if sitemap_refs:
         logger.info(f"Found sitemap index with {len(sitemap_refs)} sub-sitemaps")
         for ref in sitemap_refs:
-            sub_urls = await fetch_sitemap(ref.text.strip())
-            urls.extend(sub_urls)
+            if ref.text:
+                sub_urls = await fetch_sitemap(ref.text.strip())
+                urls.update(sub_urls)
         return urls
 
-    # Regular sitemap — extract <loc> entries
-    loc_elements = root.findall(".//sm:url/sm:loc", namespaces)
-    if not loc_elements:
+    # Regular sitemap — extract <loc> and <lastmod> entries
+    url_elements = root.findall(".//sm:url", namespaces)
+    if not url_elements:
         # Try without namespace (some sitemaps don't use it)
-        loc_elements = root.findall(".//url/loc")
+        url_elements = root.findall(".//url")
 
-    for loc in loc_elements:
-        url = loc.text.strip()
-        urls.append(url)
+    for url_el in url_elements:
+        loc = url_el.find(".//sm:loc", namespaces)
+        if loc is None:
+            loc = url_el.find(".//loc")
+            
+        if loc is not None and loc.text:
+            url = loc.text.strip()
+            
+            lastmod_el = url_el.find(".//sm:lastmod", namespaces)
+            if lastmod_el is None:
+                lastmod_el = url_el.find(".//lastmod")
+                
+            lastmod = lastmod_el.text.strip() if lastmod_el is not None and lastmod_el.text else ""
+            urls[url] = lastmod
 
     logger.info(f"Parsed {len(urls)} URLs from {sitemap_url}")
     return urls
@@ -105,7 +118,7 @@ async def fetch_sitemap(sitemap_url: str) -> list[str]:
 
 from urllib.parse import urljoin
 
-async def fetch_and_clean_page(url: str, client: httpx.AsyncClient) -> PageContent | None:
+async def fetch_and_clean_page(url: str, client: httpx.AsyncClient, lastmod: str = "") -> PageContent | None:
     """Fetch a page and extract clean text content.
 
     Strips headers, footers, navbars, scripts, and other non-content HTML.
@@ -113,6 +126,7 @@ async def fetch_and_clean_page(url: str, client: httpx.AsyncClient) -> PageConte
     Args:
         url: The page URL to fetch.
         client: Shared httpx client for connection reuse.
+        lastmod: The last modification date.
 
     Returns:
         PageContent with cleaned text, or None if fetch fails.
@@ -120,6 +134,7 @@ async def fetch_and_clean_page(url: str, client: httpx.AsyncClient) -> PageConte
     try:
         response = await client.get(url)
         response.raise_for_status()
+        html_text = response.text
     except httpx.HTTPStatusError as e:
         logger.warning(f"HTTP {e.response.status_code} for {url}, skipping")
         return None
@@ -127,7 +142,12 @@ async def fetch_and_clean_page(url: str, client: httpx.AsyncClient) -> PageConte
         logger.warning(f"Request error for {url}: {e}, skipping")
         return None
 
-    soup = BeautifulSoup(response.text, "lxml")
+    # Offload CPU-bound HTML parsing to a background thread
+    return await asyncio.to_thread(_parse_html_and_extract, html_text, url, lastmod)  # type: ignore
+
+
+def _parse_html_and_extract(html_text: str, url: str, lastmod: str) -> PageContent | None:
+    soup = BeautifulSoup(html_text, "lxml")
 
     # Extract main image before decomposing tags
     image_url = ""
@@ -171,20 +191,25 @@ async def fetch_and_clean_page(url: str, client: httpx.AsyncClient) -> PageConte
     text = re.sub(r"\n{3,}", "\n\n", text)  # Collapse excessive newlines
     text = re.sub(r" {2,}", " ", text)  # Collapse excessive spaces
 
-    if len(text.strip()) < 50:
-        logger.info(f"Skipping {url} — too little content ({len(text)} chars)")
+    cleaned_text = text.strip()
+    if len(cleaned_text) < 50:
+        logger.info(f"Skipping {url} — too little content ({len(cleaned_text)} chars)")
         return None
 
     # Infer page type from URL path
     page_type = _infer_page_type(url)
+    
+    content_hash = hashlib.md5(cleaned_text.encode()).hexdigest()
 
     return PageContent(
         url=url,
         title=title,
-        text=text.strip(),
+        text=cleaned_text,
         meta_description=meta_desc,
         page_type=page_type,
-        image_url=image_url
+        image_url=image_url,
+        lastmod=lastmod,
+        content_hash=content_hash,
     )
 
 
@@ -253,6 +278,8 @@ def chunk_text(
                             "page_type": page.page_type,
                             "meta_description": page.meta_description,
                             "image_url": page.image_url,
+                            "lastmod": page.lastmod,
+                            "content_hash": page.content_hash,
                         },
                     )
                 )
@@ -269,6 +296,8 @@ def chunk_text(
                                 "page_type": page.page_type,
                                 "meta_description": page.meta_description,
                                 "image_url": page.image_url,
+                                "lastmod": page.lastmod,
+                                "content_hash": page.content_hash,
                             },
                         )
                     )
@@ -289,6 +318,8 @@ def chunk_text(
                     "page_type": page.page_type,
                     "meta_description": page.meta_description,
                     "image_url": page.image_url,
+                    "lastmod": page.lastmod,
+                    "content_hash": page.content_hash,
                 },
             )
         )
@@ -331,6 +362,8 @@ def _split_by_sentences(text: str, max_words: int, overlap: int) -> list[str]:
 # ── Step 4: ChromaDB Upsert ──────────────────────────────────
 
 
+import time
+
 def upsert_chunks(chunks: list[TextChunk]) -> int:
     """Upsert text chunks into ChromaDB collection.
 
@@ -362,8 +395,9 @@ def upsert_chunks(chunks: list[TextChunk]) -> int:
         )
         total_upserted += len(batch)
         logger.info(f"Upserted batch {i // batch_size + 1} ({len(batch)} chunks)")
+        time.sleep(0.05)  # Yield slightly if running synchronously, though inside to_thread this just slows the thread
 
-    logger.info(f"Total upserted: {total_upserted} chunks")
+    logger.info(f"Total upserted component: {total_upserted} chunks")
     return total_upserted
 
 
@@ -395,27 +429,55 @@ async def run_ingestion(
     logger.info(f"=== Starting ingestion from {sitemap} ===")
 
     # Step 1: Discover URLs
-    urls = await fetch_sitemap(sitemap)
-    logger.info(f"Discovered {len(urls)} URLs")
+    url_manifest = await fetch_sitemap(sitemap)
+    logger.info(f"Discovered {len(url_manifest)} URLs")
+    
+    # Get existing URLs sequentially
+    stored_urls = get_all_urls()
+    
+    # Filter URLs
+    urls_to_process = []
+    for url, current_lastmod in url_manifest.items():
+        if url not in stored_urls:
+            urls_to_process.append((url, current_lastmod))
+        elif current_lastmod and stored_urls[url] == current_lastmod:
+            # Skip if we have a valid lastmod and it matches the DB
+            continue
+        else:
+            # Re-process if lastmod changed or if lastmod is missing from sitemap
+            urls_to_process.append((url, current_lastmod))
+
+    total_skipped = len(url_manifest) - len(urls_to_process)
+    logger.info(f"Skipping {total_skipped} unmodified URLs. Need to process {len(urls_to_process)} URLs.")
 
     # Step 2 & 3: Fetch, clean, and chunk pages (with concurrency limit)
     semaphore = asyncio.Semaphore(max_concurrent)
-    all_chunks: list[TextChunk] = []
 
-    total_urls = len(urls)
-    progress = {"count": 0}
+    total_urls = len(urls_to_process)
+    progress = {"count": 0, "pages_processed": 0, "total_chunks": 0, "chunks_upserted": 0}
 
-    async def process_url(url: str, client: httpx.AsyncClient):
+    async def process_url(url: str, lastmod: str, client: httpx.AsyncClient):
         async with semaphore:
             try:
-                page = await fetch_and_clean_page(url, client)
+                page = await fetch_and_clean_page(url, client, lastmod)
                 if page:
-                    chunks = chunk_text(page)
-                    # Ensure we don't have duplicates for this URL before we upsert new chunks
-                    delete_by_url(url)
+                    # Offload regex chunking to background thread
+                    chunks = await asyncio.to_thread(chunk_text, page)  # type: ignore
+                    
+                    if chunks:
+                        # Ensure we don't have duplicates for this URL
+                        await asyncio.to_thread(delete_by_url, url)  # type: ignore
+                        # Streaming Upsert (offloaded to thread to avoid halting event loop)
+                        upserted_count = await asyncio.to_thread(upsert_chunks, chunks)  # type: ignore
+                        
+                        progress["pages_processed"] += 1
+                        progress["total_chunks"] += len(chunks)
+                        progress["chunks_upserted"] += upserted_count
+                        
                     return chunks
                 return []
             except Exception as e:
+                logger.error(f"Error processing {url}: {e}")
                 return e
             finally:
                 progress["count"] += 1
@@ -425,46 +487,32 @@ async def run_ingestion(
     async with httpx.AsyncClient(
         follow_redirects=True, timeout=30.0, headers={"User-Agent": "satusatu-ingestion/1.0"}
     ) as client:
-        tasks = [process_url(url, client) for url in urls]
+        tasks = [process_url(url, lastmod, client) for url, lastmod in urls_to_process]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    pages_processed: int = 0
-    pages_failed: int = 0
-    for result in results:
-        if isinstance(result, Exception):
-            logger.warning(f"Failed to process a page: {result}")
-            pages_failed += 1
-        elif isinstance(result, list):
-            all_chunks.extend(result)
-            pages_processed += 1
-
-    logger.info(
-        f"Processed {pages_processed} pages, {pages_failed} failed, {len(all_chunks)} chunks"
-    )
-
-    # Step 4: Upsert to ChromaDB
-    total_upserted = upsert_chunks(all_chunks)
+    pages_failed: int = sum(1 for r in results if isinstance(r, Exception))
 
     # Step 5: Clean up stale URLs
-    stored_urls = get_all_urls()
-    discovered_urls = set(urls)
-    stale_urls = stored_urls - discovered_urls
+    discovered_urls = set(url_manifest.keys())
+    stale_urls = set(stored_urls.keys()) - discovered_urls
     
     stale_deleted = 0
     if stale_urls:
         logger.info(f"Found {len(stale_urls)} stale URLs not in sitemap. Cleaning up...")
         for stale_url in stale_urls:
+            # We can delete sequentially at the end
             delete_by_url(stale_url)
             stale_deleted += 1
         logger.info(f"Cleaned up {stale_deleted} stale URLs.")
 
     summary = {
         "sitemap_url": sitemap,
-        "urls_discovered": len(urls),
-        "pages_processed": pages_processed,
+        "urls_discovered": len(url_manifest),
+        "urls_skipped_unmodified": total_skipped,
+        "pages_processed": progress["pages_processed"],
         "pages_failed": pages_failed,
-        "total_chunks": len(all_chunks),
-        "chunks_upserted": total_upserted,
+        "total_chunks": progress["total_chunks"],
+        "chunks_upserted": progress["chunks_upserted"],
         "stale_urls_removed": stale_deleted,
     }
 

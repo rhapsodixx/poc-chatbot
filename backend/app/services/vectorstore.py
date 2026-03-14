@@ -57,11 +57,11 @@ async def query_similar(
     )
     return results
 
-def get_all_urls() -> set[str]:
-    """Retrieve all distinct URLs currently stored in the collection.
+def get_all_urls() -> dict[str, str]:
+    """Retrieve all distinct URLs and their lastmod timestamps currently stored.
 
     Returns:
-        A set of URLs.
+        A dictionary mapping URL strings to their lastmod timestamps (or content hashes).
     """
     collection = get_collection()
     
@@ -70,13 +70,16 @@ def get_all_urls() -> set[str]:
     # For MVP, fetching all metadata is acceptable.
     results = collection.get(include=["metadatas"])
     
-    urls = set()
+    url_manifest = {}
     if results and "metadatas" in results and results["metadatas"]:
         for metadata in results["metadatas"]:
             if metadata and "url" in metadata:
-                urls.add(metadata["url"])
+                url = metadata["url"]
+                # Store the most recent lastmod for a URL (though they should all match)
+                lastmod = metadata.get("lastmod", "")
+                url_manifest[url] = lastmod
                 
-    return urls
+    return url_manifest
 
 
 def delete_by_url(url: str) -> None:
