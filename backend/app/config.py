@@ -1,6 +1,6 @@
 """Application configuration loaded from environment variables."""
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 
@@ -12,31 +12,31 @@ class Settings(BaseSettings):
 
     # --- Application ---
     app_name: str = "satusatu-chatbot"
-    debug: bool = False
+    debug: bool
 
     # --- OpenRouter LLM ---
-    openrouter_api_key: str = ""
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_primary_model: str = "google/gemini-1.5-flash"
-    openrouter_fallback_model: str = "openai/gpt-4o-mini"
+    openrouter_api_key: str
+    openrouter_base_url: str
+    openrouter_primary_model: str
+    openrouter_fallback_model: str
 
     # --- ChromaDB ---
-    chroma_host: str = "chromadb"
-    chroma_port: int = 8000
-    chroma_collection_name: str = "satusatu_knowledge"
+    chroma_host: str
+    chroma_port: int
+    chroma_collection_name: str
 
     # --- Ingestion ---
-    site_url: str = "https://satusatu.com"
-    sitemap_url: str = "https://satusatu.com/sitemap.xml"
+    site_url: str
+    sitemap_url: str
 
     # --- Guardrails ---
-    similarity_threshold: float = 0.35
-    max_retrieved_chunks: int = 5
+    similarity_threshold: float
+    max_retrieved_chunks: int
 
     # --- CORS ---
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str]
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 @lru_cache()
