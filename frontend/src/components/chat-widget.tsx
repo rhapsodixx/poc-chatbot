@@ -4,7 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { Send, User, Bot, Ticket, Map, Headset, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -240,15 +241,16 @@ export function ChatWidget() {
                         </p>
                         <div className="flex flex-col gap-2.5">
                           {msg.handoff.email_url && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full justify-between bg-white hover:bg-slate-50 text-slate-700 border-slate-200 h-10 rounded-xl font-medium"
-                              onClick={() => window.location.href = msg.handoff!.email_url as string}
+                            <a
+                              href={msg.handoff.email_url}
+                              className={cn(
+                                buttonVariants({ variant: "outline", size: "sm" }),
+                                "w-full justify-between bg-white hover:bg-slate-50 text-slate-700 border-slate-200 h-10 rounded-xl font-medium"
+                              )}
                             >
                               Email Support
                               <ExternalLink size={14} className="text-slate-400" />
-                            </Button>
+                            </a>
                           )}
                           {msg.handoff.whatsapp_url && (
                             <Button
