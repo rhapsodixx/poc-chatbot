@@ -83,7 +83,7 @@ async def classify_intent(query: str) -> bool:
     """
     try:
         prompt = INTENT_CLASSIFICATION_PROMPT.format(query=query)
-        result = await generate_response(
+        result, _ = await generate_response(
             messages=[{"role": "user", "content": prompt}],
         )
         classification = result.strip().upper()
@@ -149,35 +149,35 @@ async def retrieve_context(query: str) -> tuple[str, float, list[dict]]:
 # ── Guardrail 3: Conditioned Generation ──────────────────────
 
 
-async def generate_answer(query: str, context: str) -> str:
+async def generate_answer(query: str, context: str) -> tuple[str, dict]:
     """Generate a response using the LLM with strict domain confinement.
 
-    Returns the LLM response, or 'TRIGGER_HANDOFF' if the model can't answer.
+    Returns a tuple of (LLM_response, token_usage_dict).
     """
     system_prompt = GENERATION_SYSTEM_PROMPT.format(context=context)
 
     try:
-        response = await generate_response(
+        response, usage = await generate_response(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": query},
             ],
         )
-        return response.strip()
+        return response.strip(), usage
     except Exception as e:
         logger.error(f"Primary LLM failed: {e}, trying fallback")
         try:
-            response = await generate_response(
+            response, usage = await generate_response(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": query},
                 ],
                 use_fallback=True,
             )
-            return response.strip()
+            return response.strip(), usage
         except Exception as e2:
             logger.error(f"Fallback LLM also failed: {e2}")
-            return "TRIGGER_HANDOFF"
+            return "TRIGGER_HANDOFF", {}
 
 
 # ── Main RAG Pipeline ────────────────────────────────────────
@@ -191,6 +191,8 @@ async def process_message(query: str) -> dict:
             - reply: The bot's response text
             - handoff: None or handoff payload dict
             - sources: List of source metadata dicts
+            - tokens_used: Total tokens consumed (int)
+            - cost: Estimated cost (float)
     """
     settings = get_settings()
 
@@ -202,6 +204,8 @@ async def process_message(query: str) -> dict:
             "reply": OFF_TOPIC_RESPONSE,
             "handoff": None,
             "sources": [],
+            "tokens_used": 0,
+            "cost": 0.0,
         }
 
     # ── Step 2: Semantic Retrieval + Confidence Check ──
@@ -220,10 +224,28 @@ async def process_message(query: str) -> dict:
                 "whatsapp_url": "https://wa.me/628001234567?text=Hi,%20I%20need%20help%20with%20satusatu.com",
             },
             "sources": sources,
+            "tokens_used": 0,
+            "cost": 0.0,
         }
 
     # ── Step 3: Conditioned Generation ──
-    answer = await generate_answer(query, context)
+    answer, usage = await generate_answer(query, context)
+
+    # Calculate cost roughly based on common models
+    # We use a fallback cost calculation here
+    model_name = settings.openrouter_primary_model
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+    total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
+    
+    cost = 0.0
+    if "gemini-flash" in model_name:
+        cost = (prompt_tokens / 1_000_000 * 0.075) + (completion_tokens / 1_000_000 * 0.3)
+    elif "gpt-4o-mini" in model_name:
+        cost = (prompt_tokens / 1_000_000 * 0.15) + (completion_tokens / 1_000_000 * 0.6)
+    else:
+        # Generic fallback
+        cost = (prompt_tokens / 1_000_000 * 0.1) + (completion_tokens / 1_000_000 * 0.5)
 
     if "TRIGGER_HANDOFF" in answer:
         logger.info("LLM triggered handoff via TRIGGER_HANDOFF keyword")
@@ -236,10 +258,14 @@ async def process_message(query: str) -> dict:
                 "whatsapp_url": "https://wa.me/6287878111111?text=Hi,%20I%20need%20help%20with%20satusatu.com",
             },
             "sources": sources,
+            "tokens_used": total_tokens,
+            "cost": cost,
         }
 
     return {
         "reply": answer,
         "handoff": None,
         "sources": sources,
+        "tokens_used": total_tokens,
+        "cost": cost,
     }

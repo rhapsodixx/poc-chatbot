@@ -36,6 +36,8 @@ class ChatResponse(BaseModel):
     reply: str
     conversation_id: str
     handoff: HandoffPayload | None = None
+    tokens_used: int | None = None
+    cost: float | None = None
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -59,4 +61,6 @@ async def chat_endpoint(req: ChatRequest):
         reply=result["reply"],
         conversation_id=conversation_id,
         handoff=handoff,
+        tokens_used=result.get("tokens_used", 0),
+        cost=result.get("cost", 0.0),
     )

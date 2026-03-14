@@ -11,7 +11,7 @@ async def generate_response(
     messages: list[dict],
     *,
     use_fallback: bool = False,
-) -> str:
+) -> tuple[str, dict]:
     """Send a chat completion request to OpenRouter.
 
     Args:
@@ -19,7 +19,7 @@ async def generate_response(
         use_fallback: If True, use the fallback model instead of primary.
 
     Returns:
-        The assistant's reply text.
+        A tuple of (assistant_reply_text, usage_dict).
 
     TODO (Phase 3): Implement full request with streaming, error handling,
     and automatic fallback on primary model failure.
@@ -46,4 +46,4 @@ async def generate_response(
         )
         response.raise_for_status()
         data = response.json()
-        return data["choices"][0]["message"]["content"]
+        return data["choices"][0]["message"]["content"], data.get("usage", {})
