@@ -5,6 +5,7 @@ and conditioned generation to produce safe, domain-confined responses.
 """
 
 import logging
+import random
 
 from app.config import get_settings
 from app.services.llm import generate_response
@@ -37,8 +38,9 @@ STRICT RULES:
 4. If the Context does not contain enough information to answer the question, you MUST reply with EXACTLY the string: TRIGGER_HANDOFF
 5. Be friendly, concise, and helpful.
 6. When mentioning products or attractions, include relevant details like pricing if available.
-7. FORMATTING PRODUCT SUGGESTIONS: When suggesting one or more specific products, you MUST include a structured JSON block at the end of your response wrapped in ```json tags.
-   Do NOT output the product details as regular text or bullet points if you are providing the JSON. Only provide a brief introductory paragraph (e.g. "Here are some great options:"). Let the JSON block handle the presentation.
+7. FORMATTING PRODUCT SUGGESTIONS: If the context contains products or tickets, you MUST output a structured JSON block at the very end of your response wrapped in ```json tags containing the items.
+   - Text portion: Write a short, friendly, and conversational preamble (e.g., "Here are some popular tickets you might like for your trip:"). Do NOT mention specific product titles, prices, or ratings in this text portion! Do NOT use bullet points in the text portion! 
+   - JSON portion: You MUST include the JSON block populated with the product details.
    The JSON must follow this exact schema:
    {{
      "products": [
@@ -67,10 +69,13 @@ OFF_TOPIC_RESPONSE = (
     "How can I help you plan your next adventure with our available experiences? 😊"
 )
 
-HANDOFF_MESSAGE = (
-    "I don't have enough information to answer that question accurately. "
-    "Let me connect you with our support team who can help you directly!"
-)
+HANDOFF_MESSAGES = [
+    "I'm not completely sure about that. Let me connect you with our support team who can help you right away!",
+    "That's a great question! I don't have the exact details, but our support team will be happy to assist you.",
+    "I don't have enough information to answer that accurately. Let me hand this over to a human agent who can help.",
+    "To make sure you get the best answer, I'm going to connect you with our support team.",
+    "I'm still learning, so I'll pass this question to our support team who can give you a precise answer."
+]
 
 
 # ── Guardrail 1: Intent Router ───────────────────────────────
@@ -216,10 +221,10 @@ async def process_message(query: str) -> dict:
             f"Low confidence (score={best_score:.3f}), triggering handoff"
         )
         return {
-            "reply": HANDOFF_MESSAGE,
+            "reply": random.choice(HANDOFF_MESSAGES),
             "handoff": {
                 "type": "handoff",
-                "message": HANDOFF_MESSAGE,
+                "message": random.choice(HANDOFF_MESSAGES),
                 "email_url": "mailto:support@satusatu.com",
                 "whatsapp_url": "https://wa.me/628001234567?text=Hi,%20I%20need%20help%20with%20satusatu.com",
             },
@@ -250,10 +255,10 @@ async def process_message(query: str) -> dict:
     if "TRIGGER_HANDOFF" in answer:
         logger.info("LLM triggered handoff via TRIGGER_HANDOFF keyword")
         return {
-            "reply": HANDOFF_MESSAGE,
+            "reply": random.choice(HANDOFF_MESSAGES),
             "handoff": {
                 "type": "handoff",
-                "message": HANDOFF_MESSAGE,
+                "message": random.choice(HANDOFF_MESSAGES),
                 "email_url": "mailto:support@satusatu.com",
                 "whatsapp_url": "https://wa.me/6287878111111?text=Hi,%20I%20need%20help%20with%20satusatu.com",
             },
