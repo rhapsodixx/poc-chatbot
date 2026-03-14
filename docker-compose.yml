@@ -42,20 +42,18 @@ services:
     restart: unless-stopped
 
   # ── Next.js Frontend (Phase 4) ──────────────────────────────
-  # Uncomment when frontend is ready:
-  #
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   container_name: satusatu-frontend
-  #   ports:
-  #     - "3000:3000"
-  #   env_file:
-  #     - .env
-  #   depends_on:
-  #     - backend
-  #   restart: unless-stopped
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: satusatu-frontend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    restart: unless-stopped
 
 volumes:
   chroma_data:
