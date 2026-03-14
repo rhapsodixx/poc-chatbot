@@ -6,6 +6,27 @@ import { RefreshCw, CheckCircle2, AlertCircle, Bot } from "lucide-react";
 export function IngestButton({ modelName = "Unknown Model" }: { modelName?: string }) {
   const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed">("idle");
   const [result, setResult] = useState<any>(null);
+  const [usage, setUsage] = useState<{ limit: number, usage: number } | null>(null);
+
+  useEffect(() => {
+    async function fetchUsage() {
+      try {
+        const res = await fetch("/api/openrouter/usage");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.data) {
+            setUsage({
+              limit: data.data.limit,
+              usage: data.data.usage,
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch OpenRouter usage", e);
+      }
+    }
+    fetchUsage();
+  }, []);
 
   const startIngestion = async () => {
     setStatus("running");
@@ -65,9 +86,25 @@ export function IngestButton({ modelName = "Unknown Model" }: { modelName?: stri
       </button>
 
       {status === "idle" && (
-        <div className="flex items-center gap-1.5 mt-[-4px] text-[11px] font-medium text-slate-500 bg-white/60 px-2.5 py-1 rounded-full border border-slate-200/60 shadow-sm backdrop-blur-sm transition-all hover:bg-white/80 hover:border-violet-200 hover:text-violet-600">
-          <Bot size={12} className="text-violet-500" />
-          Powered by <span className="font-semibold text-slate-700">{modelName}</span>
+        <div className="flex items-center gap-2 mt-[-4px] text-[11px] font-medium text-slate-500 bg-white/60 px-3 py-1.5 rounded-full border border-slate-200/60 shadow-sm backdrop-blur-sm transition-all hover:bg-white/80 hover:border-violet-200 hover:text-violet-600">
+          <div className="flex items-center gap-1.5">
+            <Bot size={12} className="text-violet-500" />
+            <span>Powered by <span className="font-semibold text-slate-700">{modelName}</span></span>
+          </div>
+          {usage && (
+            <>
+              <div className="w-[1px] h-3 bg-slate-300/60 mx-1"></div>
+              <div className="flex items-center gap-1 text-[10px] tracking-wide" title={`Usage: $${usage.usage.toFixed(4)} / Limit: $${usage.limit || 'Unlimited'}`}>
+                <span className={usage.usage > (usage.limit * 0.8) ? "text-amber-500 font-semibold" : "text-emerald-500 font-semibold"}>
+                  ${usage.usage.toFixed(4)}
+                </span>
+                <span className="text-slate-400">/</span>
+                <span className="text-slate-500">
+                  {usage.limit ? `$${usage.limit.toFixed(2)}` : '∞'}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       )}
 
