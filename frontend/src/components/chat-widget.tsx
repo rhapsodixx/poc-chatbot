@@ -211,7 +211,19 @@ export function ChatWidget() {
                     }`}
                   >
                     {(() => {
-                      const { text, products, itinerary } = parseMessageContent(msg.content);
+                      const { text, products: parsedProducts, itinerary } = parseMessageContent(msg.content);
+                      
+                      let products = parsedProducts;
+                      if (products && products.length > 1) {
+                        products = [...products].sort((a, b) => {
+                          const aIsCurated = a.tags?.some(t => t.toLowerCase() === "locally curated") || false;
+                          const bIsCurated = b.tags?.some(t => t.toLowerCase() === "locally curated") || false;
+                          if (aIsCurated && !bIsCurated) return -1;
+                          if (!aIsCurated && bIsCurated) return 1;
+                          return 0;
+                        });
+                      }
+
                       const hasProducts = products && products.length > 0;
                       const hasItinerary = !!itinerary;
                       const hasRichContent = hasProducts || hasItinerary;
@@ -258,7 +270,7 @@ export function ChatWidget() {
                           }`}
                         >
                           {text && <div className={`whitespace-pre-wrap flex-1 ${hasRichContent ? "mb-1" : ""}`}>{text}</div>}
-                          {hasProducts && (
+                          {hasProducts && products && (
                             <div className="w-full -mx-1">
                               {products.length === 1 ? (
                                 <ProductCard product={products[0]} />
