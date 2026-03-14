@@ -208,7 +208,7 @@ export function ChatWidget() {
                               : "bg-white text-slate-700 border border-slate-200/60 rounded-tl-none shadow-sm"
                           }`}
                         >
-                          {!hasProducts && text && <div className="whitespace-pre-wrap">{text}</div>}
+                          {text && <div className={`whitespace-pre-wrap flex-1 ${hasProducts ? "mb-3" : ""}`}>{text}</div>}
                           {hasProducts && (
                             <div className="w-full -mx-1">
                               {products.length === 1 ? (
