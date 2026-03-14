@@ -26,7 +26,7 @@ class HandoffPayload(BaseModel):
 
     type: str = "handoff"
     message: str
-    freshdesk_url: str | None = None
+    email_url: str | None = None
     whatsapp_url: str | None = None
 
 

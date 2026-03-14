@@ -36,6 +36,7 @@ class PageContent:
     text: str
     meta_description: str = ""
     page_type: str = "general"
+    image_url: str = ""
 
 
 @dataclass
@@ -102,6 +103,8 @@ async def fetch_sitemap(sitemap_url: str) -> list[str]:
 # ── Step 2: Page Fetcher & HTML Cleaner ──────────────────────
 
 
+from urllib.parse import urljoin
+
 async def fetch_and_clean_page(url: str, client: httpx.AsyncClient) -> PageContent | None:
     """Fetch a page and extract clean text content.
 
@@ -125,6 +128,19 @@ async def fetch_and_clean_page(url: str, client: httpx.AsyncClient) -> PageConte
         return None
 
     soup = BeautifulSoup(response.text, "lxml")
+
+    # Extract main image before decomposing tags
+    image_url = ""
+    meta_img = soup.find("meta", property="og:image")
+    if meta_img and meta_img.get("content"):
+        image_url = meta_img["content"]
+        if image_url.startswith("/"):
+            image_url = urljoin(url, image_url)
+    else:
+        # Fallback to first large image
+        img_tag = soup.find("img")
+        if img_tag and img_tag.get("src"):
+            image_url = urljoin(url, img_tag["src"])
 
     # Remove non-content elements
     for tag in soup.find_all(
@@ -168,6 +184,7 @@ async def fetch_and_clean_page(url: str, client: httpx.AsyncClient) -> PageConte
         text=text.strip(),
         meta_description=meta_desc,
         page_type=page_type,
+        image_url=image_url
     )
 
 
@@ -235,6 +252,7 @@ def chunk_text(
                             "title": page.title,
                             "page_type": page.page_type,
                             "meta_description": page.meta_description,
+                            "image_url": page.image_url,
                         },
                     )
                 )
@@ -250,6 +268,7 @@ def chunk_text(
                                 "title": page.title,
                                 "page_type": page.page_type,
                                 "meta_description": page.meta_description,
+                                "image_url": page.image_url,
                             },
                         )
                     )
@@ -269,6 +288,7 @@ def chunk_text(
                     "title": page.title,
                     "page_type": page.page_type,
                     "meta_description": page.meta_description,
+                    "image_url": page.image_url,
                 },
             )
         )

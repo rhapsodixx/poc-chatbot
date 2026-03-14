@@ -37,7 +37,27 @@ STRICT RULES:
 4. If the Context does not contain enough information to answer the question, you MUST reply with EXACTLY the string: TRIGGER_HANDOFF
 5. Be friendly, concise, and helpful.
 6. When mentioning products or attractions, include relevant details like pricing if available.
-7. Format your response in a clear, readable way.
+7. FORMATTING PRODUCT SUGGESTIONS: When suggesting one or more specific products, you MUST include a structured JSON block at the end of your response wrapped in ```json tags.
+   Do NOT output the product details as regular text or bullet points if you are providing the JSON. Only provide a brief introductory paragraph (e.g. "Here are some great options:"). Let the JSON block handle the presentation.
+   The JSON must follow this exact schema:
+   {{
+     "products": [
+       {{
+         "imageUrl": "Image URL mapped EXACTLY from the [Image URL: ...] tag in the context chunk. If none, leave empty string",
+         "location": "Location Name, City, Bali",
+         "title": "Full product title",
+         "rating": "4.9",
+         "reviewsCount": "100+",
+         "soldCount": "500+",
+         "priceOptions": {{
+           "original": "IDR 950,000",
+           "current": "IDR 350,000",
+           "discountBadge": "-63%"
+         }},
+         "productUrl": "Target URL mapped EXACTLY from the [Source URL: ...] tag in the context chunk"
+       }}
+     ]
+   }}
 
 Context:
 {context}"""
@@ -108,7 +128,12 @@ async def retrieve_context(query: str) -> tuple[str, float, list[dict]]:
     sources = []
     for doc, sim, meta in zip(documents, similarities, metadatas):
         if sim >= settings.similarity_threshold:
-            context_parts.append(doc)
+            url = meta.get("url", "")
+            img_url = meta.get("image_url", "")
+            title = meta.get("title", "")
+            
+            chunk_text = f"[Source URL: {url}]\n[Image URL: {img_url}]\n[Title: {title}]\n{doc}"
+            context_parts.append(chunk_text)
             sources.append(meta)
 
     combined_context = "\n\n---\n\n".join(context_parts)
@@ -191,7 +216,7 @@ async def process_message(query: str) -> dict:
             "handoff": {
                 "type": "handoff",
                 "message": HANDOFF_MESSAGE,
-                "freshdesk_url": "https://satusatu.freshdesk.com/support/tickets/new",
+                "email_url": "mailto:support@satusatu.com",
                 "whatsapp_url": "https://wa.me/628001234567?text=Hi,%20I%20need%20help%20with%20satusatu.com",
             },
             "sources": sources,
@@ -207,8 +232,8 @@ async def process_message(query: str) -> dict:
             "handoff": {
                 "type": "handoff",
                 "message": HANDOFF_MESSAGE,
-                "freshdesk_url": "https://satusatu.freshdesk.com/support/tickets/new",
-                "whatsapp_url": "https://wa.me/628001234567?text=Hi,%20I%20need%20help%20with%20satusatu.com",
+                "email_url": "mailto:support@satusatu.com",
+                "whatsapp_url": "https://wa.me/6287878111111?text=Hi,%20I%20need%20help%20with%20satusatu.com",
             },
             "sources": sources,
         }
