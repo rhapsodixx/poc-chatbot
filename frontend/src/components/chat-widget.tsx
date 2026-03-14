@@ -159,7 +159,7 @@ export function ChatWidget() {
   };
 
   return (
-    <Card className="w-full max-w-lg mx-auto shadow-2xl border border-violet-100/50 ring-0 bg-white/80 backdrop-blur-xl overflow-hidden rounded-2xl flex flex-col h-[750px] max-h-[90vh] sm:max-h-[850px] p-0 gap-0">
+    <Card className="w-full max-w-[560px] mx-auto shadow-2xl border border-violet-100/50 ring-0 bg-white/80 backdrop-blur-xl overflow-hidden rounded-2xl flex flex-col h-[800px] max-h-[90vh] sm:max-h-[880px] p-0 gap-0">
       <CardHeader className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white p-4 shrink-0 shadow-[0_4px_20px_-5px_rgba(124,58,237,0.3)] relative overflow-hidden m-0 border-b-0 space-y-0 text-left">
         {/* Subtle background glow effect for header */}
         <div className="absolute top-[-50%] right-[-10%] w-48 h-48 bg-cyan-400/30 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
@@ -227,13 +227,13 @@ export function ChatWidget() {
                                {[
                                  { icon: Lightbulb, label: "Inspiration", iconColor: "text-amber-500", text: "What's the unique attraction in Bali?" },
                                  { icon: Compass, label: "Recommendation", iconColor: "text-emerald-500", text: "Any recommendation for kids friendly attraction?" },
-                                 { icon: Users, label: "Family Travel", iconColor: "text-blue-500", text: "I'm travelling with a family group of four, recommend me a good place for everyone." }
+                                 { icon: Map, label: "Itinerary", iconColor: "text-violet-500", text: "Create me an itinerary for 2 days in Bali." },
+                                 { icon: Users, label: "Family Travel", iconColor: "text-blue-500", text: "Travelling with a family of four, recommend a good place." }
                                ].map((suggestion, idx) => (
                                  <button
                                    key={idx}
                                    onClick={() => handleSend(suggestion.text)}
-                                   className="flex flex-col text-left gap-2 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-violet-300 hover:shadow-md transition-all duration-200 cursor-pointer group"
-                                   style={idx === 2 ? { gridColumn: "1 / -1" } : {}}
+                                   className="flex flex-col text-left gap-2 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-violet-300 hover:shadow-md transition-all duration-200 cursor-pointer group h-full"
                                   >
                                     <div className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider ${suggestion.iconColor}`}>
                                       <suggestion.icon size={14} className="group-hover:scale-110 transition-transform duration-300" />
