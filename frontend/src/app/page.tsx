@@ -1,9 +1,15 @@
 import { ChatWidget } from "@/components/chat-widget";
 import { Ticket, Map, Headset } from "lucide-react";
+import { IngestButton } from "@/components/admin/ingest-button";
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-slate-50 relative overflow-x-hidden flex flex-col items-center p-4 py-12">
+      {/* Admin controls - absolute positioned for easy access */}
+      <div className="absolute top-4 right-4 z-50">
+        <IngestButton />
+      </div>
+
       {/* Decorative Background Elements (Aurora UI Style) */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-violet-200/40 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-cyan-200/30 rounded-full blur-[120px] pointer-events-none" />
