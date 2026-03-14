@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import chat
+from app.routers import chat, ingest
 
 
 @asynccontextmanager
@@ -42,6 +42,7 @@ def create_app() -> FastAPI:
 
     # --- Routers ---
     app.include_router(chat.router, prefix="/api")
+    app.include_router(ingest.router, prefix="/api")
 
     # --- Health check ---
     @app.get("/health", tags=["system"])

@@ -1,10 +1,15 @@
-"""Chat API router — handles user messages and returns bot responses.
+"""Chat API router — handles user messages through the RAG pipeline.
 
-Implemented in Phase 3.
+Endpoints:
+    POST /api/chat — Process a user message and return bot response
 """
+
+import uuid
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+from app.services.rag import process_message
 
 router = APIRouter(tags=["chat"])
 
@@ -35,15 +40,23 @@ class ChatResponse(BaseModel):
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(req: ChatRequest):
-    """Process a user message through the RAG pipeline.
+    """Process a user message through the 3-step guardrail RAG pipeline.
 
-    TODO (Phase 3):
-      1. Intent routing (guardrail 1)
-      2. Semantic retrieval from ChromaDB
-      3. Confidence check (guardrail 2)
-      4. Conditioned generation via OpenRouter (guardrail 3)
+    Steps:
+      1. Intent routing — off-topic queries get a polite redirect
+      2. Semantic retrieval — finds relevant knowledge chunks
+      3. Conditioned generation — LLM answers from context only
     """
+    conversation_id = req.conversation_id or str(uuid.uuid4())
+
+    result = await process_message(req.message)
+
+    handoff = None
+    if result["handoff"]:
+        handoff = HandoffPayload(**result["handoff"])
+
     return ChatResponse(
-        reply="👋 Hello! I'm the satusatu.com assistant. I'm under construction — check back soon!",
-        conversation_id=req.conversation_id or "demo-session",
+        reply=result["reply"],
+        conversation_id=conversation_id,
+        handoff=handoff,
     )

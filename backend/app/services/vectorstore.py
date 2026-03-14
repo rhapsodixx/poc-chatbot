@@ -7,7 +7,7 @@ import chromadb
 from app.config import get_settings
 
 
-def get_chroma_client() -> chromadb.HttpClient:
+def get_chroma_client():
     """Return an HTTP client connected to the ChromaDB container."""
     settings = get_settings()
     return chromadb.HttpClient(
@@ -16,7 +16,7 @@ def get_chroma_client() -> chromadb.HttpClient:
     )
 
 
-def get_collection(client: chromadb.HttpClient | None = None):
+def get_collection(client=None):
     """Get or create the knowledge-base collection.
 
     Args:
