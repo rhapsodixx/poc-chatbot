@@ -24,10 +24,59 @@ Classify whether the following user query is related to:
 - General customer support about satusatu.com services
 
 Reply with EXACTLY one word:
-- "RELEVANT" if the query is related to the above topics
+- "RELEVANT" if the query is related to general products, tickets, or support.
+- "ITINERARY" if the user is explicitly asking for a trip itinerary, a day-by-day plan, or suggesting a travel schedule.
 - "OFFTOPIC" if the query is unrelated (e.g., politics, coding, recipes, other websites)
 
 User query: {query}"""
+
+ITINERARY_SYSTEM_PROMPT = """You are the satusatu.com itinerary planner. Your role is to help customers plan their trips using ONLY attractions and products available on satusatu.com.
+
+STRICT RULES for Itineraries:
+1. You MUST ONLY use the provided Context to build the itinerary. Do NOT hallucinate or invent products, attractions, or locations not present in the Context.
+2. The itinerary MUST NOT exceed 3 days. If the user asks for more, provide a maximum of 3 days.
+3. Be realistic about timing:
+   - Estimate the duration for each activity based on the nature of the product.
+   - You MUST account for realistic commute/travel times between consecutive locations.
+4. If the Context does not contain enough information to create a meaningful itinerary, you MUST reply with EXACTLY the string: TRIGGER_HANDOFF
+5. FORMATTING ITINERARY SUGGESTIONS: You MUST output a structured JSON block at the very end of your response wrapped in ```json tags.
+   - Text portion: Write a short, friendly preamble (e.g., "Here is a suggested itinerary for your trip:"). Do NOT mention specific products or schedules in this text portion! Do NOT use bullet points in the text portion!
+   - JSON portion: You MUST include the JSON block populated with the itinerary details.
+   The JSON must follow this exact schema:
+   {{
+     "itinerary": [
+       {{
+         "day": 1,
+         "title": "Day 1 Title",
+         "activities": [
+           {{
+             "time": "09:00 - 13:00",
+             "title": "Activity Title",
+             "description": "Short description of what to do.",
+             "products": [
+               {{
+                 "imageUrl": "Image URL mapped EXACTLY from the [Image URL: ...] tag in the context chunk. If none, leave empty string",
+                 "location": "Location Name",
+                 "title": "Full product title",
+                 "rating": "4.9",
+                 "reviewsCount": "100+",
+                 "soldCount": "500+",
+                 "priceOptions": {{
+                   "original": "IDR 950,000",
+                   "current": "IDR 350,000",
+                   "discountBadge": "-63%"
+                 }},
+                 "productUrl": "Target URL mapped EXACTLY from the [Source URL: ...] tag in the context chunk"
+               }}
+             ]
+           }}
+         ]
+       }}
+     ]
+   }}
+
+Context:
+{context}"""
 
 GENERATION_SYSTEM_PROMPT = """You are the satusatu.com concierge assistant. Your role is to help customers with attractions, tickets, itineraries, and trip planning.
 
@@ -81,10 +130,10 @@ HANDOFF_MESSAGES = [
 # ── Guardrail 1: Intent Router ───────────────────────────────
 
 
-async def classify_intent(query: str) -> bool:
-    """Classify whether a query is relevant to satusatu.com.
+async def classify_intent(query: str) -> str:
+    """Classify whether a query is relevant to satusatu.com, an itinerary, or off-topic.
 
-    Returns True if relevant, False if off-topic.
+    Returns "RELEVANT", "ITINERARY", or "OFFTOPIC".
     """
     try:
         prompt = INTENT_CLASSIFICATION_PROMPT.format(query=query)
@@ -92,12 +141,17 @@ async def classify_intent(query: str) -> bool:
             messages=[{"role": "user", "content": prompt}],
         )
         classification = result.strip().upper()
-        is_relevant = "RELEVANT" in classification
-        logger.info(f"Intent classification: '{classification}' → relevant={is_relevant}")
-        return is_relevant
+        if "ITINERARY" in classification:
+            intent = "ITINERARY"
+        elif "RELEVANT" in classification:
+            intent = "RELEVANT"
+        else:
+            intent = "OFFTOPIC"
+        logger.info(f"Intent classification: '{classification}' → {intent}")
+        return intent
     except Exception as e:
-        logger.warning(f"Intent classification failed: {e}, defaulting to relevant")
-        return True  # Fail open — let the other guardrails catch it
+        logger.warning(f"Intent classification failed: {e}, defaulting to RELEVANT")
+        return "RELEVANT"  # Fail open — let the other guardrails catch it
 
 
 # ── Guardrail 2: Semantic Confidence ─────────────────────────
@@ -154,12 +208,15 @@ async def retrieve_context(query: str) -> tuple[str, float, list[dict]]:
 # ── Guardrail 3: Conditioned Generation ──────────────────────
 
 
-async def generate_answer(query: str, context: str) -> tuple[str, dict]:
+async def generate_answer(query: str, context: str, intent: str = "RELEVANT") -> tuple[str, dict]:
     """Generate a response using the LLM with strict domain confinement.
 
     Returns a tuple of (LLM_response, token_usage_dict).
     """
-    system_prompt = GENERATION_SYSTEM_PROMPT.format(context=context)
+    if intent == "ITINERARY":
+        system_prompt = ITINERARY_SYSTEM_PROMPT.format(context=context)
+    else:
+        system_prompt = GENERATION_SYSTEM_PROMPT.format(context=context)
 
     try:
         response, usage = await generate_response(
@@ -202,8 +259,8 @@ async def process_message(query: str) -> dict:
     settings = get_settings()
 
     # ── Step 1: Intent Routing ──
-    is_relevant = await classify_intent(query)
-    if not is_relevant:
+    intent = await classify_intent(query)
+    if intent == "OFFTOPIC":
         logger.info("Query classified as off-topic, returning canned response")
         return {
             "reply": OFF_TOPIC_RESPONSE,
@@ -234,7 +291,7 @@ async def process_message(query: str) -> dict:
         }
 
     # ── Step 3: Conditioned Generation ──
-    answer, usage = await generate_answer(query, context)
+    answer, usage = await generate_answer(query, context, intent)
 
     # Calculate cost roughly based on common models
     # We use a fallback cost calculation here
