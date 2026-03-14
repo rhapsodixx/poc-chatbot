@@ -1,5 +1,5 @@
 import React from "react";
-import { MapPin, Star } from "lucide-react";
+import { MapPin, Star, BadgeCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 export interface ProductPriceOptions {
@@ -17,6 +17,7 @@ export interface Product {
   soldCount?: string;
   priceOptions: ProductPriceOptions;
   productUrl?: string;
+  tags?: string[];
 }
 
 export function ProductCard({ product }: { product: Product }) {
@@ -43,9 +44,16 @@ export function ProductCard({ product }: { product: Product }) {
         {/* Subtle gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-slate-900/10 to-transparent opacity-60" />
 
+        {product.tags && product.tags.some(tag => tag.toLowerCase() === "locally curated") && (
+          <div className="absolute top-3 left-3 bg-gradient-to-r from-rose-500 to-orange-500 text-white text-[12px] font-bold tracking-wide px-3 py-1.5 rounded-full flex items-center shadow-md border border-white/20 z-10">
+            <BadgeCheck size={14} className="mr-1.5" strokeWidth={2.5} />
+            Locally Curated
+          </div>
+        )}
+
         {product.location && (
-          <div className="absolute top-3 left-3 bg-black/40 backdrop-blur-md text-white text-[11px] font-medium tracking-wide px-2.5 py-1 rounded-full flex items-center shadow-sm border border-white/10">
-            <MapPin size={10} className="mr-1 text-cyan-400" />
+          <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-md text-slate-800 text-[11px] font-bold tracking-wide px-2.5 py-1.5 rounded-full flex items-center shadow-sm border border-slate-200 z-10">
+            <MapPin size={12} className="mr-1 text-rose-500" strokeWidth={2.5} />
             {product.location}
           </div>
         )}
@@ -56,6 +64,16 @@ export function ProductCard({ product }: { product: Product }) {
           <h3 className="font-semibold text-slate-800 leading-snug line-clamp-2 text-[15px] group-hover:text-violet-700 transition-colors">
             {product.title}
           </h3>
+
+          {product.tags && product.tags.filter(t => t.toLowerCase() !== "locally curated").length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1 mb-2">
+              {product.tags.filter(t => t.toLowerCase() !== "locally curated").map((tag, idx) => (
+                <span key={idx} className="bg-slate-100/80 text-slate-600 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-slate-200/60 capitalize">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="flex items-center text-xs text-slate-500 gap-1.5 font-medium">
             {product.rating && (
