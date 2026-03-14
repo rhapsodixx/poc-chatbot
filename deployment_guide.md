@@ -60,7 +60,7 @@ nano .env # Or use vim
 Paste your production environment variables into this file. Ensure you define production-specific values for:
 *   API Keys (OpenAI, Pinecone/Qdrant, etc.)
 *   Database URLs
-*   CORS Origins (`http://panjigautama.com`, `https://panjigautama.com`)
+*   CORS Origins (`http://satusatuconcierge.panjigautama.com`, `https://satusatuconcierge.panjigautama.com`)
 *   Environment type (`ENVIRONMENT=production`)
 
 Set secure permissions on the `.env` file:
@@ -122,7 +122,7 @@ apt install nginx -y
 
 Create an Nginx server block configuration for your application:
 ```bash
-nano /etc/nginx/sites-available/satusatu-chatbot
+  nano /etc/nginx/sites-available/satusatu-chatbot
 ```
 
 Add the following configuration (adjust ports based on your `docker-compose.yml` internal mappings):
