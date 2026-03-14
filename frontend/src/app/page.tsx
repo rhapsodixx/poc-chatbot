@@ -48,7 +48,7 @@ export default function Home() {
         <div className="w-full flex flex-col items-center justify-center gap-4">
           <ChatWidget />
           <div className="w-full flex justify-center lg:justify-end pr-2">
-            <IngestButton />
+            <IngestButton modelName={process.env.OPENROUTER_PRIMARY_MODEL || "Unknown Model"} />
           </div>
         </div>
       </div>

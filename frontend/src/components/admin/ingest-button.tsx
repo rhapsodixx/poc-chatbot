@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
+import { RefreshCw, CheckCircle2, AlertCircle, Bot } from "lucide-react";
 
-export function IngestButton() {
+export function IngestButton({ modelName = "Unknown Model" }: { modelName?: string }) {
   const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed">("idle");
   const [result, setResult] = useState<any>(null);
 
@@ -63,6 +63,13 @@ export function IngestButton() {
         <RefreshCw className={`w-4 h-4 ${status === "running" ? "animate-spin text-slate-400" : "text-violet-500"}`} />
         {status === "running" ? "Syncing Knowledge Base..." : "Sync Knowledge Base"}
       </button>
+
+      {status === "idle" && (
+        <div className="flex items-center gap-1.5 mt-[-4px] text-[11px] font-medium text-slate-500 bg-white/60 px-2.5 py-1 rounded-full border border-slate-200/60 shadow-sm backdrop-blur-sm transition-all hover:bg-white/80 hover:border-violet-200 hover:text-violet-600">
+          <Bot size={12} className="text-violet-500" />
+          Powered by <span className="font-semibold text-slate-700">{modelName}</span>
+        </div>
+      )}
 
       {status === "completed" && (
         <div className="flex flex-col items-center text-sm text-emerald-600 bg-emerald-50 px-3 py-2 rounded-md border border-emerald-100">
