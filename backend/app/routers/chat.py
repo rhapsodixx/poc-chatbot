@@ -6,12 +6,33 @@ Endpoints:
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+import httpx
 
+from app.config import get_settings
 from app.services.rag import process_message
 
 router = APIRouter(tags=["chat"])
+
+@router.get("/openrouter/usage")
+async def get_openrouter_usage():
+    """Fetch usage and limits from OpenRouter."""
+    settings = get_settings()
+    if not settings.openrouter_api_key:
+        raise HTTPException(status_code=400, detail="OpenRouter API key is missing.")
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                "https://openrouter.ai/api/v1/auth/key",
+                headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 class ChatRequest(BaseModel):
