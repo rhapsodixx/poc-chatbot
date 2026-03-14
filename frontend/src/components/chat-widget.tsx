@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, User, Bot, Ticket, Map, Headset, ExternalLink } from "lucide-react";
+import { Send, User, Bot, Ticket, Map, Headset, ExternalLink, Lightbulb, Compass, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { cn } from "@/lib/utils";
@@ -95,7 +95,7 @@ export function ChatWidget() {
     {
       id: "welcome",
       role: "bot",
-      content: "Hello! I'm your satusatu.com concierge. How can I help you plan your next adventure today?",
+      content: "I'm your one-stop travel assistant. I can help you discover amazing attractions, plan perfect itineraries, and even recommend family-friendly spots for your dream destination! Of course, you can ask me anything about travel! If you don't know what to ask, simply try the recommended questions below.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -109,16 +109,17 @@ export function ChatWidget() {
     }
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
+  const handleSend = async (textOverride?: string) => {
+    const textToSend = textOverride || input;
+    if (!textToSend.trim()) return;
 
-    const userMsg: Message = { id: Date.now().toString(), role: "user", content: input };
+    const userMsg: Message = { id: Date.now().toString(), role: "user", content: textToSend };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/api/chat", {
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -205,7 +206,7 @@ export function ChatWidget() {
                   </Avatar>
 
                   <div
-                    className={`flex flex-col gap-2 max-w-[85%] ${
+                    className={`flex flex-col gap-2 ${msg.id === "welcome" ? "max-w-[95%] w-full" : "max-w-[85%]"} ${
                       msg.role === "user" ? "items-end" : "items-start"
                     }`}
                   >
@@ -214,6 +215,37 @@ export function ChatWidget() {
                       const hasProducts = products && products.length > 0;
                       const hasItinerary = !!itinerary;
                       const hasRichContent = hasProducts || hasItinerary;
+
+                      if (msg.id === "welcome") {
+                        return (
+                          <div className="flex flex-col gap-4 w-full mt-1 mb-2">
+                            <div className="bg-slate-50/80 border border-slate-100 rounded-2xl rounded-tl-none p-4 text-[15px] text-slate-700 font-medium leading-relaxed tracking-tight shadow-sm">
+                              {msg.content}
+                            </div>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1 w-full">
+                               {[
+                                 { icon: Lightbulb, label: "Inspiration", iconColor: "text-amber-500", text: "What's the unique attraction in Bali?" },
+                                 { icon: Compass, label: "Recommendation", iconColor: "text-emerald-500", text: "Any recommendation for kids friendly attraction?" },
+                                 { icon: Users, label: "Family Travel", iconColor: "text-blue-500", text: "I'm travelling with a family group of four, recommend me a good place for everyone." }
+                               ].map((suggestion, idx) => (
+                                 <button
+                                   key={idx}
+                                   onClick={() => handleSend(suggestion.text)}
+                                   className="flex flex-col text-left gap-2 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-violet-300 hover:shadow-md transition-all duration-200 cursor-pointer group"
+                                   style={idx === 2 ? { gridColumn: "1 / -1" } : {}}
+                                  >
+                                    <div className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider ${suggestion.iconColor}`}>
+                                      <suggestion.icon size={14} className="group-hover:scale-110 transition-transform duration-300" />
+                                      {suggestion.label}
+                                    </div>
+                                    <p className="text-sm text-slate-700 font-medium leading-snug">{suggestion.text}</p>
+                                  </button>
+                               ))}
+                            </div>
+                          </div>
+                        );
+                      }
 
                       return (
                         <div
