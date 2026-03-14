@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
 
 from app.config import get_settings
 from app.routers import chat, ingest
@@ -23,6 +24,12 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """Application factory."""
     settings = get_settings()
+    
+    log_level = logging.DEBUG if settings.debug else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
 
     app = FastAPI(
         title="satusatu Chatbot API",
