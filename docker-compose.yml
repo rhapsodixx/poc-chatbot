@@ -1,0 +1,62 @@
+# ============================================================
+# satusatu.com RAG Chatbot — Docker Compose
+# ============================================================
+# Compatible with both Docker Compose and Podman Compose.
+#
+# Usage:
+#   docker compose up --build        (Docker)
+#   podman-compose up --build        (Podman)
+# ============================================================
+
+services:
+  # ── FastAPI Backend ──────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: satusatu-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - chromadb
+    restart: unless-stopped
+
+  # ── ChromaDB Vector Database ─────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    container_name: satusatu-chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+
+  # ── Next.js Frontend (Phase 4) ──────────────────────────────
+  # Uncomment when frontend is ready:
+  #
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: satusatu-frontend
+  #   ports:
+  #     - "3000:3000"
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - backend
+  #   restart: unless-stopped
+
+volumes:
+  chroma_data:
+    driver: local
