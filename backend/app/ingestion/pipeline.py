@@ -402,15 +402,25 @@ async def run_ingestion(
     semaphore = asyncio.Semaphore(max_concurrent)
     all_chunks: list[TextChunk] = []
 
+    total_urls = len(urls)
+    progress = {"count": 0}
+
     async def process_url(url: str, client: httpx.AsyncClient):
         async with semaphore:
-            page = await fetch_and_clean_page(url, client)
-            if page:
-                chunks = chunk_text(page)
-                # Ensure we don't have duplicates for this URL before we upsert new chunks
-                delete_by_url(url)
-                return chunks
-            return []
+            try:
+                page = await fetch_and_clean_page(url, client)
+                if page:
+                    chunks = chunk_text(page)
+                    # Ensure we don't have duplicates for this URL before we upsert new chunks
+                    delete_by_url(url)
+                    return chunks
+                return []
+            except Exception as e:
+                return e
+            finally:
+                progress["count"] += 1
+                left = total_urls - progress["count"]
+                logger.info(f"[{progress['count']}/{total_urls}] Processed {url} — {left} URLs left to fetch")
 
     async with httpx.AsyncClient(
         follow_redirects=True, timeout=30.0, headers={"User-Agent": "satusatu-ingestion/1.0"}
@@ -424,7 +434,7 @@ async def run_ingestion(
         if isinstance(result, Exception):
             logger.warning(f"Failed to process a page: {result}")
             pages_failed += 1
-        elif result:
+        elif isinstance(result, list):
             all_chunks.extend(result)
             pages_processed += 1
 
