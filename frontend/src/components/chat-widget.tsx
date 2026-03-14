@@ -13,14 +13,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { ProductCard, type Product } from "./product-card";
 import { CardCarousel } from "./card-carousel";
+import { ItineraryTimeline, type ItineraryData } from "./itinerary-timeline";
 function parseMessageContent(content: string) {
   try {
     // 1. Try to find content between ```json and ```
     const markdownMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
     if (markdownMatch) {
       const parsed = JSON.parse(markdownMatch[1].trim());
+      if (parsed?.itinerary) {
+        return { text: content.replace(markdownMatch[0], "").trim(), products: null, itinerary: parsed as ItineraryData };
+      }
       if (parsed?.products) {
-        return { text: content.replace(markdownMatch[0], "").trim(), products: parsed.products as Product[] };
+        return { text: content.replace(markdownMatch[0], "").trim(), products: parsed.products as Product[], itinerary: null };
       }
     }
 
@@ -30,36 +34,45 @@ function parseMessageContent(content: string) {
       let jsonStr = truncatedMarkdownMatch[1];
       try {
         const parsed = JSON.parse(jsonStr);
+        if (parsed?.itinerary) {
+          return { text: content.replace(truncatedMarkdownMatch[0], "").trim(), products: null, itinerary: parsed as ItineraryData };
+        }
         if (parsed?.products) {
-          return { text: content.replace(truncatedMarkdownMatch[0], "").trim(), products: parsed.products as Product[] };
+          return { text: content.replace(truncatedMarkdownMatch[0], "").trim(), products: parsed.products as Product[], itinerary: null };
         }
       } catch (e) {
         // Attempt aggressive fix for incomplete JSON (e.g., missing closing braces/brackets)
         try {
           const aggressiveFix = jsonStr.trim().replace(/,$/, "") + "]}";
           const parsed2 = JSON.parse(aggressiveFix);
+          if (parsed2?.itinerary) {
+            return { text: content.replace(truncatedMarkdownMatch[0], "").trim(), products: null, itinerary: parsed2 as ItineraryData };
+          }
           if (parsed2?.products) {
-            return { text: content.replace(truncatedMarkdownMatch[0], "").trim(), products: parsed2.products as Product[] };
+            return { text: content.replace(truncatedMarkdownMatch[0], "").trim(), products: parsed2.products as Product[], itinerary: null };
           }
         } catch (e2) {}
       }
     }
 
-    // 3. Fallback: try to find any { "products": ... } at the end
-    const fallbackMatch = content.match(/\{\s*"products"\s*:[\s\S]*?\}\s*$/i);
+    // 3. Fallback: try to find any { "products": ... } or { "itinerary": ... } at the end
+    const fallbackMatch = content.match(/\{\s*(?:"products"|"itinerary")\s*:[\s\S]*?\}\s*$/i);
     if (fallbackMatch) {
       const parsed = JSON.parse(fallbackMatch[0]);
+      if (parsed?.itinerary) {
+        return { text: content.replace(fallbackMatch[0], "").trim(), products: null, itinerary: parsed as ItineraryData };
+      }
       if (parsed?.products) {
-        return { text: content.replace(fallbackMatch[0], "").trim(), products: parsed.products as Product[] };
+        return { text: content.replace(fallbackMatch[0], "").trim(), products: parsed.products as Product[], itinerary: null };
       }
     }
   } catch (e) {
-    console.error("Failed to parse product JSON", e);
+    console.error("Failed to parse JSON", e);
   }
   
   // Clean up any stray ```json at the end if we failed to parse anything useful
   const cleanedText = content.replace(/```(?:json)?\s*(\{[\s\S]*)?$/i, "").trim();
-  return { text: cleanedText || content, products: null };
+  return { text: cleanedText || content, products: null, itinerary: null };
 }
 type HandoffPayload = {
   type: string;
@@ -197,19 +210,22 @@ export function ChatWidget() {
                     }`}
                   >
                     {(() => {
-                      const { text, products } = parseMessageContent(msg.content);
+                      const { text, products, itinerary } = parseMessageContent(msg.content);
                       const hasProducts = products && products.length > 0;
+                      const hasItinerary = !!itinerary;
+                      const hasRichContent = hasProducts || hasItinerary;
+
                       return (
                         <div
                           className={`px-4 py-3 text-[15px] shadow-sm flex flex-col gap-4 font-medium leading-relaxed tracking-tight ${
-                            hasProducts ? "rounded-t-2xl rounded-br-2xl w-full min-w-[280px] sm:min-w-[360px]" : "rounded-2xl"
+                            hasRichContent ? "rounded-t-2xl rounded-br-2xl w-full min-w-[280px] sm:min-w-[360px]" : "rounded-2xl"
                           } ${
                             msg.role === "user"
                               ? "bg-slate-800 text-white rounded-tr-none shadow-md"
                               : "bg-white text-slate-700 border border-slate-200/60 rounded-tl-none shadow-sm"
                           }`}
                         >
-                          {text && <div className={`whitespace-pre-wrap flex-1 ${hasProducts ? "mb-3" : ""}`}>{text}</div>}
+                          {text && <div className={`whitespace-pre-wrap flex-1 ${hasRichContent ? "mb-1" : ""}`}>{text}</div>}
                           {hasProducts && (
                             <div className="w-full -mx-1">
                               {products.length === 1 ? (
@@ -217,6 +233,11 @@ export function ChatWidget() {
                               ) : (
                                 <CardCarousel products={products} />
                               )}
+                            </div>
+                          )}
+                          {hasItinerary && (
+                            <div className="w-full -mx-1 mt-1">
+                              <ItineraryTimeline data={itinerary} />
                             </div>
                           )}
                           {msg.role === "bot" && msg.tokensUsed ? (
