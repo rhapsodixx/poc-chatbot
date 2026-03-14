@@ -18,7 +18,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.config import get_settings
-from app.services.vectorstore import get_chroma_client, get_collection
+from app.services.vectorstore import get_chroma_client, get_collection, delete_by_url, get_all_urls
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -407,6 +407,8 @@ async def run_ingestion(
             page = await fetch_and_clean_page(url, client)
             if page:
                 chunks = chunk_text(page)
+                # Ensure we don't have duplicates for this URL before we upsert new chunks
+                delete_by_url(url)
                 return chunks
             return []
 
@@ -416,8 +418,8 @@ async def run_ingestion(
         tasks = [process_url(url, client) for url in urls]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    pages_processed = 0
-    pages_failed = 0
+    pages_processed: int = 0
+    pages_failed: int = 0
     for result in results:
         if isinstance(result, Exception):
             logger.warning(f"Failed to process a page: {result}")
@@ -433,6 +435,19 @@ async def run_ingestion(
     # Step 4: Upsert to ChromaDB
     total_upserted = upsert_chunks(all_chunks)
 
+    # Step 5: Clean up stale URLs
+    stored_urls = get_all_urls()
+    discovered_urls = set(urls)
+    stale_urls = stored_urls - discovered_urls
+    
+    stale_deleted = 0
+    if stale_urls:
+        logger.info(f"Found {len(stale_urls)} stale URLs not in sitemap. Cleaning up...")
+        for stale_url in stale_urls:
+            delete_by_url(stale_url)
+            stale_deleted += 1
+        logger.info(f"Cleaned up {stale_deleted} stale URLs.")
+
     summary = {
         "sitemap_url": sitemap,
         "urls_discovered": len(urls),
@@ -440,6 +455,7 @@ async def run_ingestion(
         "pages_failed": pages_failed,
         "total_chunks": len(all_chunks),
         "chunks_upserted": total_upserted,
+        "stale_urls_removed": stale_deleted,
     }
 
     logger.info(f"=== Ingestion complete: {summary} ===")
