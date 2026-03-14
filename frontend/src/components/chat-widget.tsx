@@ -72,6 +72,8 @@ type Message = {
   role: "user" | "bot";
   content: string;
   handoff?: HandoffPayload;
+  tokensUsed?: number;
+  cost?: number;
 };
 
 export function ChatWidget() {
@@ -121,6 +123,8 @@ export function ChatWidget() {
         role: "bot",
         content: data.reply,
         handoff: data.handoff,
+        tokensUsed: data.tokens_used,
+        cost: data.cost,
       };
 
       setMessages((prev) => [...prev, botMsg]);
@@ -140,7 +144,7 @@ export function ChatWidget() {
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto shadow-2xl border border-violet-100/50 ring-0 bg-white/80 backdrop-blur-xl overflow-hidden rounded-2xl flex flex-col h-[600px] max-h-[85vh] sm:max-h-[800px] p-0 gap-0">
+    <Card className="w-full max-w-lg mx-auto shadow-2xl border border-violet-100/50 ring-0 bg-white/80 backdrop-blur-xl overflow-hidden rounded-2xl flex flex-col h-[750px] max-h-[90vh] sm:max-h-[850px] p-0 gap-0">
       <CardHeader className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white p-4 shrink-0 shadow-[0_4px_20px_-5px_rgba(124,58,237,0.3)] relative overflow-hidden m-0 border-b-0 space-y-0 text-left">
         {/* Subtle background glow effect for header */}
         <div className="absolute top-[-50%] right-[-10%] w-48 h-48 bg-cyan-400/30 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
@@ -197,14 +201,14 @@ export function ChatWidget() {
                       return (
                         <div
                           className={`px-4 py-3 text-[15px] shadow-sm flex flex-col gap-4 font-medium leading-relaxed tracking-tight ${
-                            hasProducts ? "rounded-t-2xl rounded-br-2xl w-full min-w-[280px] sm:min-w-[320px]" : "rounded-2xl"
+                            hasProducts ? "rounded-t-2xl rounded-br-2xl w-full min-w-[280px] sm:min-w-[360px]" : "rounded-2xl"
                           } ${
                             msg.role === "user"
                               ? "bg-slate-800 text-white rounded-tr-none shadow-md"
                               : "bg-white text-slate-700 border border-slate-200/60 rounded-tl-none shadow-sm"
                           }`}
                         >
-                          {text && <div className="whitespace-pre-wrap">{text}</div>}
+                          {!hasProducts && text && <div className="whitespace-pre-wrap">{text}</div>}
                           {hasProducts && (
                             <div className="w-full -mx-1">
                               {products.length === 1 ? (
@@ -214,6 +218,13 @@ export function ChatWidget() {
                               )}
                             </div>
                           )}
+                          {msg.role === "bot" && msg.tokensUsed ? (
+                            <div className="text-[10px] text-slate-400 font-medium tracking-wide mt-1.5 self-end flex items-center gap-1 opacity-80 backdrop-blur-sm select-none">
+                              <span>⚡ {msg.tokensUsed} tokens</span>
+                              <span>•</span>
+                              <span>${msg.cost?.toFixed(5)}</span>
+                            </div>
+                          ) : null}
                         </div>
                       );
                     })()}
