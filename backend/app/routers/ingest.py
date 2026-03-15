@@ -1,6 +1,6 @@
 """Ingestion API router — triggers and monitors the data ingestion pipeline."""
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Body
 from pydantic import BaseModel
 
 from app.ingestion.pipeline import run_ingestion
@@ -42,7 +42,7 @@ async def _run_ingestion_task(sitemap_url: str | None, max_concurrent: int):
 
 
 @router.post("/ingest", response_model=IngestStatusResponse)
-async def trigger_ingestion(req: IngestRequest, background_tasks: BackgroundTasks):
+async def trigger_ingestion(background_tasks: BackgroundTasks, req: IngestRequest = Body(default_factory=IngestRequest)):
     """Trigger the ingestion pipeline as a background task.
 
     Returns immediately with status 'running'. Use GET /api/ingest/status

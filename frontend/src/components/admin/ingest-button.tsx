@@ -36,12 +36,20 @@ export function IngestButton({ modelName = "Unknown Model" }: { modelName?: stri
         method: "POST",
       });
       const data = await res.json();
+      
+      if (!res.ok) {
+        setStatus("failed");
+        setResult({ error: data.error || data.detail || "Failed to trigger ingestion" });
+        return;
+      }
+
       if (data.status === "already_running") {
         setStatus("running");
       }
     } catch (error) {
       console.error(error);
       setStatus("failed");
+      setResult({ error: "Failed to trigger ingestion due to network error" });
     }
   };
 
