@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     openrouter_base_url: str
     openrouter_primary_model: str
     openrouter_fallback_model: str
+    openrouter_embedding_model: str
 
     # --- ChromaDB ---
     chroma_host: str

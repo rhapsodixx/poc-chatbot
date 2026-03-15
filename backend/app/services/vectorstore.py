@@ -28,9 +28,18 @@ def get_collection(client=None):
     if client is None:
         client = get_chroma_client()
     settings = get_settings()
+    
+    from chromadb.utils import embedding_functions
+    embedding_function = embedding_functions.OpenAIEmbeddingFunction(
+        api_key=settings.openrouter_api_key,
+        model_name=settings.openrouter_embedding_model,
+        api_base=settings.openrouter_base_url,
+    )
+
     return client.get_or_create_collection(
         name=settings.chroma_collection_name,
         metadata={"hnsw:space": "cosine"},
+        embedding_function=embedding_function,
     )
 
 
@@ -57,29 +66,32 @@ async def query_similar(
     )
     return results
 
-def get_all_urls() -> dict[str, str]:
-    """Retrieve all distinct URLs and their lastmod timestamps currently stored.
+def get_all_stored_metadata() -> dict[str, dict[str, str]]:
+    """Retrieve all distinct URLs, their lastmod, and content hashes currently stored.
 
     Returns:
-        A dictionary mapping URL strings to their lastmod timestamps (or content hashes).
+        A dictionary mapping URL strings to a dict of their metadata ('lastmod', 'content_hash').
     """
     collection = get_collection()
     
     # We retrieve all documents. If the collection grows very large, 
     # we might need to paginate or keep a separate metadata index.
-    # For MVP, fetching all metadata is acceptable.
     results = collection.get(include=["metadatas"])
     
-    url_manifest = {}
+    url_metadata = {}
     if results and "metadatas" in results and results["metadatas"]:
         for metadata in results["metadatas"]:
             if metadata and "url" in metadata:
                 url = metadata["url"]
-                # Store the most recent lastmod for a URL (though they should all match)
-                lastmod = metadata.get("lastmod", "")
-                url_manifest[url] = lastmod
                 
-    return url_manifest
+                # If we haven't seen this URL yet, or if we want to ensure we have the latest metadata
+                if url not in url_metadata:
+                    url_metadata[url] = {
+                        "lastmod": metadata.get("lastmod", ""),
+                        "content_hash": metadata.get("content_hash", "")
+                    }
+                
+    return url_metadata
 
 
 def delete_by_url(url: str) -> None:

@@ -18,7 +18,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.config import get_settings
-from app.services.vectorstore import get_chroma_client, get_collection, delete_by_url, get_all_urls
+from app.services.vectorstore import get_chroma_client, get_collection, delete_by_url, get_all_stored_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +83,9 @@ async def fetch_sitemap(sitemap_url: str) -> dict[str, str]:
     if sitemap_refs:
         logger.info(f"Found sitemap index with {len(sitemap_refs)} sub-sitemaps")
         for ref in sitemap_refs:
-            if ref.text:
-                sub_urls = await fetch_sitemap(ref.text.strip())
+            ref_text = ref.text
+            if ref_text is not None:
+                sub_urls = await fetch_sitemap(ref_text.strip())
                 urls.update(sub_urls)
         return urls
 
@@ -238,8 +239,8 @@ def _infer_page_type(url: str) -> str:
 
 def chunk_text(
     page: PageContent,
-    max_chunk_size: int = 512,
-    overlap: int = 50,
+    max_chunk_size: int = 256,
+    overlap: int = 32,
 ) -> list[TextChunk]:
     """Split page content into semantically meaningful chunks.
 
@@ -433,34 +434,31 @@ async def run_ingestion(
     logger.info(f"Discovered {len(url_manifest)} URLs")
     
     # Get existing URLs sequentially
-    stored_urls = get_all_urls()
+    stored_metadata = get_all_stored_metadata()
     
-    # Filter URLs
+    # We will process all URLs but skip embeddings if the content hash matches
     urls_to_process = []
     for url, current_lastmod in url_manifest.items():
-        if url not in stored_urls:
-            urls_to_process.append((url, current_lastmod))
-        elif current_lastmod and stored_urls[url] == current_lastmod:
-            # Skip if we have a valid lastmod and it matches the DB
-            continue
-        else:
-            # Re-process if lastmod changed or if lastmod is missing from sitemap
-            urls_to_process.append((url, current_lastmod))
+        urls_to_process.append((url, current_lastmod, stored_metadata.get(url, {}).get("content_hash")))
 
-    total_skipped = len(url_manifest) - len(urls_to_process)
-    logger.info(f"Skipping {total_skipped} unmodified URLs. Need to process {len(urls_to_process)} URLs.")
+    logger.info(f"Queued {len(urls_to_process)} URLs for content-hash diffing.")
 
     # Step 2 & 3: Fetch, clean, and chunk pages (with concurrency limit)
     semaphore = asyncio.Semaphore(max_concurrent)
 
     total_urls = len(urls_to_process)
-    progress = {"count": 0, "pages_processed": 0, "total_chunks": 0, "chunks_upserted": 0}
+    progress = {"count": 0, "pages_skipped": 0, "pages_processed": 0, "total_chunks": 0, "chunks_upserted": 0}
 
-    async def process_url(url: str, lastmod: str, client: httpx.AsyncClient):
+    async def process_url(url: str, lastmod: str, stored_hash: str | None, client: httpx.AsyncClient):
         async with semaphore:
             try:
                 page = await fetch_and_clean_page(url, client, lastmod)
                 if page:
+                    if stored_hash and page.content_hash == stored_hash:
+                        logger.debug(f"Skipping {url} — content hash unchanged")
+                        progress["pages_skipped"] += 1
+                        return []
+
                     # Offload regex chunking to background thread
                     chunks = await asyncio.to_thread(chunk_text, page)  # type: ignore
                     
@@ -487,14 +485,14 @@ async def run_ingestion(
     async with httpx.AsyncClient(
         follow_redirects=True, timeout=30.0, headers={"User-Agent": "satusatu-ingestion/1.0"}
     ) as client:
-        tasks = [process_url(url, lastmod, client) for url, lastmod in urls_to_process]
+        tasks = [process_url(url, lastmod, stored_hash, client) for url, lastmod, stored_hash in urls_to_process]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
     pages_failed: int = sum(1 for r in results if isinstance(r, Exception))
 
     # Step 5: Clean up stale URLs
     discovered_urls = set(url_manifest.keys())
-    stale_urls = set(stored_urls.keys()) - discovered_urls
+    stale_urls = set(stored_metadata.keys()) - discovered_urls
     
     stale_deleted = 0
     if stale_urls:
@@ -508,7 +506,7 @@ async def run_ingestion(
     summary = {
         "sitemap_url": sitemap,
         "urls_discovered": len(url_manifest),
-        "urls_skipped_unmodified": total_skipped,
+        "urls_skipped_unmodified": progress["pages_skipped"],
         "pages_processed": progress["pages_processed"],
         "pages_failed": pages_failed,
         "total_chunks": progress["total_chunks"],
