@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>satusatu.com RAG Chatbot — Technical Documentation</title>
+<meta name="description" content="Comprehensive technical documentation for the satusatu.com RAG Chatbot, covering architecture, ingestion pipeline, RAG pipeline, and technology choices.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+:root{--bg:#0a0a0f;--bg-card:#12121a;--bg-card-hover:#1a1a25;--bg-code:#1e1e2e;--bg-toc:#0e0e16;--border:#2a2a3a;--border-active:#6366f1;--text:#e2e8f0;--text-muted:#94a3b8;--text-heading:#f1f5f9;--accent:#818cf8;--accent-hover:#6366f1;--accent-bg:rgba(99,102,241,.08);--success:#34d399;--warning:#fbbf24;--danger:#f87171;--info:#60a5fa;--gradient:linear-gradient(135deg,#6366f1 0%,#8b5cf6 50%,#a78bfa 100%);--shadow:0 4px 24px rgba(0,0,0,.4);--radius:12px;--code-keyword:#c792ea;--code-string:#c3e88d;--code-comment:#636d83;--code-function:#82aaff;--code-number:#f78c6c}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:80px}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;font-size:15px;-webkit-font-smoothing:antialiased}
+::selection{background:var(--accent);color:#fff}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+
+/* ── Layout ── */
+.page-wrapper{display:flex;min-height:100vh}
+.sidebar{position:fixed;top:0;left:0;width:280px;height:100vh;background:var(--bg-toc);border-right:1px solid var(--border);padding:24px 0;overflow-y:auto;z-index:100;transition:transform .3s}
+.sidebar-header{padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.sidebar-header h2{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sidebar-header .version{font-size:11px;color:var(--text-muted);margin-top:4px}
+.toc-list{list-style:none}
+.toc-list li a{display:block;padding:8px 20px;color:var(--text-muted);text-decoration:none;font-size:13px;font-weight:500;border-left:2px solid transparent;transition:all .2s}
+.toc-list li a:hover,.toc-list li a.active{color:var(--accent);border-left-color:var(--accent);background:var(--accent-bg)}
+.toc-list li.sub a{padding-left:36px;font-size:12px;font-weight:400}
+.main-content{margin-left:280px;flex:1;max-width:960px;padding:48px 48px 120px}
+
+/* ── Typography ── */
+h1{font-size:2.4rem;font-weight:800;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:12px;line-height:1.2}
+.subtitle{font-size:1.05rem;color:var(--text-muted);margin-bottom:48px;max-width:600px}
+h2{font-size:1.5rem;font-weight:700;color:var(--text-heading);margin:56px 0 20px;padding-bottom:12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+h2 .icon{font-size:1.3rem}
+h3{font-size:1.15rem;font-weight:600;color:var(--text-heading);margin:32px 0 12px}
+h4{font-size:1rem;font-weight:600;color:var(--accent);margin:24px 0 8px}
+p{margin-bottom:16px;color:var(--text)}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+strong{color:var(--text-heading);font-weight:600}
+ul,ol{margin:0 0 16px 20px}li{margin-bottom:6px}
+hr{border:none;border-top:1px solid var(--border);margin:40px 0}
+
+/* ── Cards ── */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:20px;transition:border-color .2s}
+.card:hover{border-color:var(--border-active)}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{text-align:center;padding:20px}.stat-card .stat-value{font-size:2rem;font-weight:800;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}.stat-card .stat-label{font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+
+/* ── Code ── */
+code{font-family:'JetBrains Mono',monospace;font-size:13px;background:var(--bg-code);padding:2px 6px;border-radius:4px;color:var(--accent)}
+pre{background:var(--bg-code);border:1px solid var(--border);border-radius:var(--radius);padding:20px;overflow-x:auto;margin-bottom:20px;position:relative}
+pre code{background:none;padding:0;color:var(--text);font-size:13px;line-height:1.6}
+.code-label{position:absolute;top:8px;right:12px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-family:'JetBrains Mono',monospace}
+.kw{color:var(--code-keyword)}.str{color:var(--code-string)}.cmt{color:var(--code-comment)}.fn{color:var(--code-function)}.num{color:var(--code-number)}
+
+/* ── Comparison Table ── */
+.comp-table{width:100%;border-collapse:collapse;margin:20px 0;font-size:13px}
+.comp-table th{background:var(--bg-code);color:var(--accent);font-weight:600;text-align:left;padding:12px 16px;border-bottom:2px solid var(--border)}
+.comp-table td{padding:12px 16px;border-bottom:1px solid var(--border);vertical-align:top}
+.comp-table tr:hover td{background:var(--accent-bg)}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.badge-chosen{background:rgba(99,102,241,.15);color:var(--accent);border:1px solid var(--accent)}
+.badge-alt{background:rgba(148,163,184,.1);color:var(--text-muted);border:1px solid var(--border)}
+.badge-success{background:rgba(52,211,153,.12);color:var(--success)}
+.badge-warn{background:rgba(251,191,36,.12);color:var(--warning)}
+.badge-danger{background:rgba(248,113,113,.12);color:var(--danger)}
+
+/* ── Collapsible ── */
+details{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
+details summary{padding:16px 20px;cursor:pointer;font-weight:600;color:var(--text-heading);display:flex;align-items:center;gap:8px;user-select:none;transition:background .2s}
+details summary:hover{background:var(--accent-bg)}
+details summary::marker{content:''}
+details summary::before{content:'▸';color:var(--accent);font-size:14px;transition:transform .2s;display:inline-block;width:16px}
+details[open] summary::before{transform:rotate(90deg)}
+details .details-content{padding:4px 20px 20px}
+
+/* ── Mermaid ── */
+.mermaid-container{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin:20px 0;overflow-x:auto}
+.mermaid{display:flex;justify-content:center}
+.mermaid svg{max-width:100%}
+
+/* ── Charts ── */
+.chart-container{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin:20px 0}
+.chart-container canvas{max-height:400px}
+.chart-title{font-size:14px;font-weight:600;color:var(--text-heading);margin-bottom:16px;text-align:center}
+
+/* ── Improvement Cards ── */
+.improvement-card{display:flex;gap:16px;align-items:flex-start}
+.improvement-card .priority{min-width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.priority-high{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid var(--danger)}
+.priority-med{background:rgba(251,191,36,.15);color:var(--warning);border:1px solid var(--warning)}
+.priority-low{background:rgba(52,211,153,.15);color:var(--success);border:1px solid var(--success)}
+
+/* ── Interactive Calc ── */
+.calc-row{display:flex;gap:16px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.calc-row label{font-size:13px;color:var(--text-muted);min-width:160px}
+.calc-row input[type=range]{flex:1;accent-color:var(--accent);min-width:200px}
+.calc-row .calc-val{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--accent);min-width:80px;text-align:right}
+.calc-result{background:var(--accent-bg);border:1px solid var(--accent);border-radius:var(--radius);padding:20px;text-align:center;margin-top:16px}
+.calc-result .big{font-size:2rem;font-weight:800;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+/* ── Mobile ── */
+.menu-toggle{display:none;position:fixed;top:16px;left:16px;z-index:200;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);cursor:pointer;font-size:18px}
+@media(max-width:768px){
+.sidebar{transform:translateX(-100%)}
+.sidebar.open{transform:translateX(0)}
+.main-content{margin-left:0;padding:24px 16px 120px}
+.menu-toggle{display:block}
+h1{font-size:1.8rem}
+}
+
+/* ── Step indicators ── */
+.step{display:flex;gap:16px;margin-bottom:24px}
+.step-num{min-width:40px;height:40px;border-radius:50%;background:var(--accent-bg);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:16px;flex-shrink:0}
+.step-body h4{margin-top:0;margin-bottom:4px}
+.step-body p{margin-bottom:0}
+</style>
+</head>
+<body>
+
+<button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰</button>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- SIDEBAR / TABLE OF CONTENTS                                 -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <h2>satusatu.com</h2>
+    <div class="version">RAG Chatbot Documentation v1.0</div>
+  </div>
+  <ul class="toc-list">
+    <li><a href="#overview">System Architecture</a></li>
+    <li class="sub"><a href="#docker-topology">Docker Topology</a></li>
+    <li><a href="#ingestion">Ingestion Pipeline</a></li>
+    <li class="sub"><a href="#ing-sitemap">Sitemap Parsing</a></li>
+    <li class="sub"><a href="#ing-fetch">Page Fetching</a></li>
+    <li class="sub"><a href="#ing-chunk">Semantic Chunking</a></li>
+    <li class="sub"><a href="#ing-upsert">ChromaDB Upsert</a></li>
+    <li><a href="#rag">RAG Pipeline</a></li>
+    <li class="sub"><a href="#g1">Guardrail 1: Intent</a></li>
+    <li class="sub"><a href="#g2">Guardrail 2: Retrieval</a></li>
+    <li class="sub"><a href="#g3">Guardrail 3: Generation</a></li>
+    <li><a href="#tech">Technology Choices</a></li>
+    <li><a href="#embedding">Embedding & Vectors</a></li>
+    <li><a href="#prompts">Prompt Engineering</a></li>
+    <li><a href="#cost">Cost Estimation</a></li>
+    <li><a href="#improvements">Improvements</a></li>
+  </ul>
+</nav>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- MAIN CONTENT                                                 -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<main class="main-content">
+
+<h1>satusatu.com RAG Chatbot</h1>
+<p class="subtitle">A domain-confined, guardrail-protected Retrieval-Augmented Generation chatbot for attraction & ticketing customer support.</p>
+
+<div class="card-grid">
+  <div class="card stat-card"><div class="stat-value">3</div><div class="stat-label">Guardrail Layers</div></div>
+  <div class="card stat-card"><div class="stat-value">256</div><div class="stat-label">Words / Chunk</div></div>
+  <div class="card stat-card"><div class="stat-value">~$0.02</div><div class="stat-label">Cost / 1K Queries</div></div>
+  <div class="card stat-card"><div class="stat-value">3</div><div class="stat-label">Docker Services</div></div>
+</div>
+
+<!-- ══════════════ 1. ARCHITECTURE OVERVIEW ══════════════ -->
+<h2 id="overview"><span class="icon">🏗️</span> System Architecture Overview</h2>
+<p>The chatbot follows a classic <strong>RAG (Retrieval-Augmented Generation)</strong> architecture with three Docker-composed services. The frontend communicates with the FastAPI backend, which orchestrates retrieval from ChromaDB and generation via OpenRouter.</p>
+
+<div class="mermaid-container">
+<pre class="mermaid">
+flowchart LR
+  subgraph Browser["🌐 Browser"]
+    U["User"]
+  end
+
+  subgraph Docker["Docker Compose"]
+    subgraph FE["Frontend :3000"]
+      NJ["Next.js\n+ shadcn/ui"]
+    end
+    subgraph BE["Backend :8000"]
+      FA["FastAPI"]
+      RAG["RAG Pipeline"]
+      ING["Ingestion\nPipeline"]
+    end
+    subgraph DB["ChromaDB :8001"]
+      VEC["HNSW Index\n(cosine)"]
+    end
+  end
+
+  subgraph Ext["External Services"]
+    OR["OpenRouter API"]
+    GEM["Gemini 2.5 Flash"]
+    EMB["text-embedding-\n3-small"]
+    SW["satusatu.com\nsitemap.xml"]
+  end
+
+  U -->|"HTTP"| NJ
+  NJ -->|"/api/chat\nproxy"| FA
+  FA --> RAG
+  RAG -->|"query"| VEC
+  RAG -->|"generate"| OR
+  OR --> GEM
+  OR --> EMB
+  ING -->|"upsert\nchunks"| VEC
+  ING -->|"crawl"| SW
+  FA --> ING
+</pre>
+</div>
+
+<h3 id="docker-topology">Docker Compose Service Topology</h3>
+<div class="mermaid-container">
+<pre class="mermaid">
+graph TB
+  FE["satusatu-frontend\n(Next.js)\nPort 3000"] -->|"INTERNAL_API_URL\nhttp://backend:8000"| BE["satusatu-backend\n(FastAPI)\nPort 8000"]
+  BE -->|"CHROMA_HOST=chromadb\nCHROMA_PORT=8000"| CD["satusatu-chromadb\n(ChromaDB 0.6.3)\nPort 8001→8000"]
+  CD --- VOL[("chroma_data\nvolume")]
+
+  style FE fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
+  style BE fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
+  style CD fill:#1a1a2e,stroke:#6366f1,color:#e2e8f0
+  style VOL fill:#0f172a,stroke:#334155,color:#94a3b8
+</pre>
+</div>
+
+<div class="card">
+  <p><strong>Service Dependencies:</strong> Frontend <code>depends_on</code> Backend → Backend <code>depends_on</code> ChromaDB. All services use <code>restart: unless-stopped</code> and load environment from <code>.env</code>.</p>
+</div>
+
+<!-- ══════════════ 2. INGESTION PIPELINE ══════════════ -->
+<h2 id="ingestion"><span class="icon">📥</span> Ingestion Pipeline</h2>
+<p>The ingestion pipeline (<code>backend/app/ingestion/pipeline.py</code>) is an async process that crawls the satusatu.com sitemap, cleans HTML, chunks content semantically, and upserts embeddings into ChromaDB. It supports <strong>incremental updates</strong> via content-hash diffing.</p>
+
+<div class="mermaid-container">
+<pre class="mermaid">
+flowchart TD
+  START(["🚀 run_ingestion()"]) --> S1["Step 1\nfetch_sitemap()"]
+  S1 -->|"Dict[url→lastmod]"| S1B["Check sitemap index?\n(nested sitemaps)"]
+  S1B -->|Yes| S1C["Recursively fetch\nsub-sitemaps"]
+  S1C --> S1
+  S1B -->|No| S2["Compare with\nstored metadata"]
+  S2 --> S2B["Queue all URLs for\ncontent-hash diffing"]
+  S2B --> S3["Step 2\nfetch_and_clean_page()\n× N concurrent"]
+  S3 --> S3B{"Content hash\nchanged?"}
+  S3B -->|No| SKIP["Skip — unchanged"]
+  S3B -->|Yes| S4["Step 3\nchunk_text()"]
+  S4 --> S5["Collect all chunks\nglobally"]
+  S5 --> S6["Step 4\ndelete_by_url()\nfor updated URLs"]
+  S6 --> S7["upsert_chunks()\nbatch of 50"]
+  S7 --> S8["Cleanup stale URLs\nnot in sitemap"]
+  S8 --> DONE(["✅ Summary"])
+
+  style START fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
+  style DONE fill:#064e3b,stroke:#34d399,color:#e2e8f0
+  style SKIP fill:#1c1917,stroke:#78716c,color:#a8a29e
+</pre>
+</div>
+
+<h3 id="ing-sitemap">Step 1 — Sitemap Parsing</h3>
+<div class="step"><div class="step-num">1</div><div class="step-body">
+  <h4>fetch_sitemap(sitemap_url)</h4>
+  <p>Fetches the XML sitemap using <code>httpx.AsyncClient</code> with redirect-following. Supports <strong>sitemap index files</strong> — if the root sitemap contains <code>&lt;sitemap&gt;</code> elements, it recursively fetches each sub-sitemap. Returns a <code>Dict[str, str]</code> mapping each URL to its <code>&lt;lastmod&gt;</code> timestamp. Handles both namespaced and non-namespaced XML.</p>
+</div></div>
+
+<details>
+  <summary>📄 Key Code — fetch_sitemap</summary>
+  <div class="details-content">
+<pre><code><span class="kw">async def</span> <span class="fn">fetch_sitemap</span>(sitemap_url: <span class="fn">str</span>) -> dict[str, str]:
+    urls: dict[str, str] = {}
+    namespaces = {<span class="str">"sm"</span>: <span class="str">"http://www.sitemaps.org/schemas/sitemap/0.9"</span>}
+
+    <span class="kw">async with</span> httpx.AsyncClient(follow_redirects=<span class="kw">True</span>) <span class="kw">as</span> client:
+        response = <span class="kw">await</span> client.get(sitemap_url)
+
+    root = ET.fromstring(response.text)
+    <span class="cmt"># Check for sitemap index → recursive fetch</span>
+    sitemap_refs = root.findall(<span class="str">".//sm:sitemap/sm:loc"</span>, namespaces)
+    <span class="kw">if</span> sitemap_refs:
+        <span class="kw">for</span> ref <span class="kw">in</span> sitemap_refs:
+            sub_urls = <span class="kw">await</span> fetch_sitemap(ref.text.strip())
+            urls.update(sub_urls)
+        <span class="kw">return</span> urls
+    <span class="cmt"># Regular sitemap — extract &lt;loc&gt; and &lt;lastmod&gt;</span>
+    ...</code></pre>
+  </div>
+</details>
+
+<h3 id="ing-fetch">Step 2 — Page Fetching & HTML Cleaning</h3>
+<div class="step"><div class="step-num">2</div><div class="step-body">
+  <h4>fetch_and_clean_page(url, client, lastmod)</h4>
+  <p>Concurrency is controlled via <code>asyncio.Semaphore(max_concurrent=5)</code>. Each page is fetched with a shared <code>httpx.AsyncClient</code> for connection reuse. HTML parsing is offloaded to a background thread via <code>asyncio.to_thread()</code> to avoid blocking the event loop.</p>
+</div></div>
+
+<div class="card">
+  <h4>HTML Cleaning Strategy</h4>
+  <ul>
+    <li><strong>Decompose</strong> non-content tags: <code>script, style, nav, header, footer, aside, noscript, iframe</code></li>
+    <li><strong>Extract</strong> <code>og:image</code> meta tag (fallback: first <code>&lt;img&gt;</code> tag)</li>
+    <li><strong>Prefer</strong> <code>&lt;main&gt;</code> → <code>&lt;article&gt;</code> → <code>&lt;body&gt;</code> for content extraction</li>
+    <li><strong>Collapse</strong> whitespace: 3+ newlines → 2, 2+ spaces → 1</li>
+    <li><strong>Skip</strong> pages with &lt;50 characters of cleaned content</li>
+    <li><strong>Infer page type</strong> from URL patterns (attraction, ticket, blog, faq, etc.)</li>
+  </ul>
+</div>
+
+<h3 id="ing-chunk">Step 3 — Semantic Chunking</h3>
+<div class="step"><div class="step-num">3</div><div class="step-body">
+  <h4>chunk_text(page, max_chunk_size=256, overlap=32)</h4>
+  <p>A two-tier chunking strategy optimized for embedding quality:</p>
+</div></div>
+
+<div class="card">
+  <h4>Chunking Algorithm</h4>
+  <ol>
+    <li><strong>Primary split</strong> — by double-newlines (<code>\n\n</code>) or markdown headings (<code># ## ###</code>)</li>
+    <li><strong>Accumulate</strong> sections until word count exceeds <code>max_chunk_size</code> (256 words)</li>
+    <li><strong>Oversized sections</strong> — fallback to sentence-level splitting via <code>_split_by_sentences()</code></li>
+    <li><strong>Overlap</strong> — 32-word overlap between consecutive chunks ensures context continuity at boundaries</li>
+  </ol>
+  <p style="margin-top:12px">Each chunk carries rich metadata: <code>url</code>, <code>title</code>, <code>page_type</code>, <code>meta_description</code>, <code>image_url</code>, <code>lastmod</code>, and <code>content_hash</code>.</p>
+</div>
+
+<h3 id="ing-upsert">Step 4 — ChromaDB Upsert</h3>
+<div class="step"><div class="step-num">4</div><div class="step-body">
+  <h4>upsert_chunks(chunks) — Global Batched Upsert</h4>
+  <p>All chunks from all updated pages are collected globally and upserted in <strong>batches of 50</strong>. Before upserting, old chunks for updated URLs are deleted via <code>delete_by_url()</code>. Stale URLs (present in ChromaDB but removed from sitemap) are cleaned up at the end. Chunk IDs are deterministic MD5 hashes of <code>url + text[:50]</code>.</p>
+</div></div>
+
+<!-- ══════════════ 3. RAG PIPELINE ══════════════ -->
+<h2 id="rag"><span class="icon">🤖</span> RAG Pipeline — 3 Guardrail System</h2>
+<p>The real-time query pipeline (<code>backend/app/services/rag.py</code>) implements a <strong>3-step guardrail architecture</strong> to ensure domain confinement, prevent hallucination, and enable graceful human handoff.</p>
+
+<div class="mermaid-container">
+<pre class="mermaid">
+flowchart TD
+  Q["📝 User Query"] --> G1{"Guardrail 1\nIntent Classification"}
+  G1 -->|"OFFTOPIC"| OT["🚫 Canned Response\n'I specialize in\nattractions...'"]
+  G1 -->|"RELEVANT"| G2
+  G1 -->|"ITINERARY"| G2
+  G2{"Guardrail 2\nSemantic Retrieval\n+ Confidence Check"}
+  G2 -->|"No context OR\nscore < threshold"| HO1["🤝 Handoff\n(Email + WhatsApp)"]
+  G2 -->|"score ≥ threshold"| G3
+  G3{"Guardrail 3\nConditioned\nGeneration"}
+  G3 -->|"LLM returns\nTRIGGER_HANDOFF"| HO2["🤝 Handoff\n(Email + WhatsApp)"]
+  G3 -->|"Normal response"| OUT["✅ Bot Reply\n+ Product Cards\nor Itinerary"]
+
+  style Q fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
+  style OT fill:#7f1d1d,stroke:#f87171,color:#fca5a5
+  style HO1 fill:#78350f,stroke:#fbbf24,color:#fde68a
+  style HO2 fill:#78350f,stroke:#fbbf24,color:#fde68a
+  style OUT fill:#064e3b,stroke:#34d399,color:#a7f3d0
+  style G1 fill:#312e81,stroke:#818cf8,color:#c7d2fe
+  style G2 fill:#312e81,stroke:#818cf8,color:#c7d2fe
+  style G3 fill:#312e81,stroke:#818cf8,color:#c7d2fe
+</pre>
+</div>
+
+<h3 id="g1">Guardrail 1 — Intent Classification</h3>
+<div class="card">
+  <h4>classify_intent(query) → "RELEVANT" | "ITINERARY" | "OFFTOPIC"</h4>
+  <p>A lightweight LLM call classifies each incoming query using <code>INTENT_CLASSIFICATION_PROMPT</code>. The prompt asks the model to emit exactly one word. The system checks for the presence of keywords in the response to handle minor variations.</p>
+  <p><strong>Fail-Open Strategy:</strong> If classification fails (LLM error, timeout), it defaults to <code>"RELEVANT"</code> — letting the downstream guardrails handle safety. This prevents classification errors from blocking legitimate queries.</p>
+</div>
+
+<h3 id="g2">Guardrail 2 — Semantic Retrieval & Confidence Check</h3>
+<div class="card">
+  <h4>retrieve_context(query) → (context, best_score, sources)</h4>
+  <p>Queries ChromaDB for the top <code>max_retrieved_chunks + 3</code> results (extra to compensate for filtered homepage chunks). ChromaDB returns <strong>cosine distances</strong> (0 = identical, 2 = opposite), converted to similarity:</p>
+  <pre><code>similarity = <span class="num">1</span> - (distance / <span class="num">2</span>)</code></pre>
+  <p><strong>Homepage Filtering:</strong> Chunks from root URLs (ending in <code>/en-US</code>, <code>/id-ID</code>, <code>.com</code>, <code>.com/</code>) are filtered out to prevent the LLM from extracting products without proper catalog URLs or images.</p>
+  <p><strong>Confidence Gate:</strong> If no chunks pass the <code>similarity_threshold</code> (default: <strong>0.35</strong>), the system bypasses generation entirely and triggers a human handoff with randomized friendly messages.</p>
+</div>
+
+<h3 id="g3">Guardrail 3 — Conditioned Generation</h3>
+<div class="card">
+  <h4>generate_answer(query, context, intent) → (response, usage)</h4>
+  <p>The LLM is given a <strong>strictly constrained system prompt</strong> with the retrieved context injected. Two system prompts exist:</p>
+  <ul>
+    <li><strong>GENERATION_SYSTEM_PROMPT</strong> — for general product/attraction queries</li>
+    <li><strong>ITINERARY_SYSTEM_PROMPT</strong> — for trip planning (max 3 days, realistic timing)</li>
+  </ul>
+  <p>Both prompts instruct the LLM to output <code>TRIGGER_HANDOFF</code> if the context is insufficient. The backend checks for this keyword and replaces it with a handoff payload containing Email and WhatsApp links.</p>
+  <p><strong>Model Failover:</strong> If the primary model (<code>Gemini 2.5 Flash</code>) fails, the system automatically retries with the fallback model (<code>GPT-4o-mini</code>). If both fail, it returns <code>TRIGGER_HANDOFF</code>.</p>
+</div>
+
+<!-- ══════════════ 4. TECHNOLOGY CHOICES ══════════════ -->
+<h2 id="tech"><span class="icon">⚙️</span> Technology Choices & Rationale</h2>
+
+<table class="comp-table">
+  <thead>
+    <tr><th>Component</th><th>Chosen</th><th>Alternatives Considered</th><th>Why This Choice</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Backend</strong></td>
+      <td><span class="badge badge-chosen">FastAPI</span></td>
+      <td><span class="badge badge-alt">Django</span> <span class="badge badge-alt">Flask</span></td>
+      <td>Async-native, built-in Pydantic validation, automatic OpenAPI docs, streaming response support, ideal for I/O-heavy LLM workloads</td>
+    </tr>
+    <tr>
+      <td><strong>Vector DB</strong></td>
+      <td><span class="badge badge-chosen">ChromaDB</span></td>
+      <td><span class="badge badge-alt">Pinecone</span> <span class="badge badge-alt">Weaviate</span> <span class="badge badge-alt">Qdrant</span></td>
+      <td>Self-hosted via Docker (zero cost), built-in embedding functions, simple API, sufficient for MVP scale (~5K chunks), persistent storage via volume mount</td>
+    </tr>
+    <tr>
+      <td><strong>LLM Gateway</strong></td>
+      <td><span class="badge badge-chosen">OpenRouter</span></td>
+      <td><span class="badge badge-alt">Direct API</span> <span class="badge badge-alt">LiteLLM</span></td>
+      <td>Model-agnostic routing with a single API key, easy primary/fallback switching, unified billing, OpenAI-compatible API for both chat and embeddings</td>
+    </tr>
+    <tr>
+      <td><strong>Primary LLM</strong></td>
+      <td><span class="badge badge-chosen">Gemini 2.5 Flash</span></td>
+      <td><span class="badge badge-alt">GPT-4o-mini</span> <span class="badge badge-alt">Claude Haiku</span></td>
+      <td>Best cost-to-quality ratio ($0.075/1M input tokens), fast inference, massive context window (1M tokens), excellent instruction following</td>
+    </tr>
+    <tr>
+      <td><strong>Embedding</strong></td>
+      <td><span class="badge badge-chosen">text-embedding-3-small</span></td>
+      <td><span class="badge badge-alt">Cohere Embed</span> <span class="badge badge-alt">Local models</span></td>
+      <td>High quality at low cost ($0.02/1M tokens), 1536 dimensions, accessed via OpenRouter's OpenAI-compatible endpoint, plug-and-play with ChromaDB's OpenAIEmbeddingFunction</td>
+    </tr>
+    <tr>
+      <td><strong>HTML Parser</strong></td>
+      <td><span class="badge badge-chosen">BeautifulSoup + lxml</span></td>
+      <td><span class="badge badge-alt">Scrapy</span> <span class="badge badge-alt">Playwright</span></td>
+      <td>Lightweight, sufficient for server-rendered content, no JS execution needed, lxml parser is fast for XML/HTML, no browser overhead</td>
+    </tr>
+    <tr>
+      <td><strong>Frontend</strong></td>
+      <td><span class="badge badge-chosen">Next.js</span></td>
+      <td><span class="badge badge-alt">Vite + React</span> <span class="badge badge-alt">Svelte</span></td>
+      <td>SSR capability, built-in API route proxying (solves CORS), rich shadcn/ui component library, TypeScript-first</td>
+    </tr>
+    <tr>
+      <td><strong>Orchestration</strong></td>
+      <td><span class="badge badge-chosen">Docker Compose</span></td>
+      <td><span class="badge badge-alt">K8s</span> <span class="badge badge-alt">Manual</span></td>
+      <td>Unified dev/prod environment, service isolation, declarative networking, volume persistence, simple single-command deployment</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ══════════════ 5. EMBEDDING DEEP DIVE ══════════════ -->
+<h2 id="embedding"><span class="icon">🧬</span> Embedding & Vector Search Deep Dive</h2>
+
+<div class="card">
+  <h4>Embedding Configuration</h4>
+  <p>Embeddings are generated via ChromaDB's <code>OpenAIEmbeddingFunction</code>, configured to route through OpenRouter:</p>
+<pre><code>embedding_function = embedding_functions.<span class="fn">OpenAIEmbeddingFunction</span>(
+    api_key=settings.openrouter_api_key,
+    model_name=settings.openrouter_embedding_model,  <span class="cmt"># openai/text-embedding-3-small</span>
+    api_base=settings.openrouter_base_url,            <span class="cmt"># https://openrouter.ai/api/v1</span>
+)
+
+collection = client.<span class="fn">get_or_create_collection</span>(
+    name=<span class="str">"satusatu_knowledge"</span>,
+    metadata={<span class="str">"hnsw:space"</span>: <span class="str">"cosine"</span>},  <span class="cmt"># HNSW index with cosine distance</span>
+    embedding_function=embedding_function,
+)</code></pre>
+</div>
+
+<div class="card">
+  <h4>Vector Search Mechanics</h4>
+  <ul>
+    <li><strong>Index:</strong> HNSW (Hierarchical Navigable Small World) — approximate nearest neighbor, O(log N) query time</li>
+    <li><strong>Distance Metric:</strong> Cosine distance (0 = identical, 2 = opposite)</li>
+    <li><strong>Similarity Conversion:</strong> <code>similarity = 1 - (distance / 2)</code> — maps to [0, 1] range</li>
+    <li><strong>Threshold:</strong> <code>SIMILARITY_THRESHOLD=0.35</code> — chunks below this are discarded</li>
+    <li><strong>Max Results:</strong> <code>MAX_RETRIEVED_CHUNKS=5</code> — top-K after filtering</li>
+  </ul>
+</div>
+
+<h3>Chunk Size vs. Retrieval Quality</h3>
+<div class="chart-container">
+  <div class="chart-title">Conceptual: Chunk Size Impact on Retrieval Metrics</div>
+  <canvas id="chunkChart"></canvas>
+</div>
+
+<!-- ══════════════ 6. PROMPT ENGINEERING ══════════════ -->
+<h2 id="prompts"><span class="icon">📝</span> Prompt Engineering</h2>
+<p>The system uses three carefully crafted prompt templates, each serving a specific role in the pipeline.</p>
+
+<details>
+  <summary>🔍 INTENT_CLASSIFICATION_PROMPT</summary>
+  <div class="details-content">
+    <p><strong>Purpose:</strong> Fast, single-word classification gate.</p>
+    <p><strong>Outputs:</strong> <code>RELEVANT</code> | <code>ITINERARY</code> | <code>OFFTOPIC</code></p>
+    <p><strong>Design Decision:</strong> Kept minimal to minimize token usage and latency. No system prompt — the classification instruction is the user message itself.</p>
+<pre><code><span class="str">"Is this query regarding a product, ticket, or itinerary
+on satusatu.com? Reply with EXACTLY one word:
+RELEVANT, ITINERARY, or OFFTOPIC"</span></code></pre>
+  </div>
+</details>
+
+<details>
+  <summary>💬 GENERATION_SYSTEM_PROMPT (General Queries)</summary>
+  <div class="details-content">
+    <p><strong>Key Design Decisions:</strong></p>
+    <ul>
+      <li><strong>Structured JSON Output:</strong> Forces the LLM to output a <code>```json</code> block with a strict schema for product cards. This enables the frontend to render rich UI components instead of plain text.</li>
+      <li><strong>Product Validation:</strong> Products must have a catalog-specific source URL (containing <code>/catalog/</code>). Prevents extraction of products from homepage listings where images/URLs may be incomplete.</li>
+      <li><strong>Minimum Sold Threshold:</strong> Products with &lt;100 units sold are excluded from "best"/"recommended" queries to prevent promoting untested items.</li>
+      <li><strong>Tag Extraction:</strong> "locally curated" must be an <strong>exact string match</strong> in Context — not inferred. "Kids friendly" etc. can be inferred from product descriptions.</li>
+      <li><strong>TRIGGER_HANDOFF:</strong> Magic string that the backend intercepts to trigger the human handoff UI.</li>
+    </ul>
+  </div>
+</details>
+
+<details>
+  <summary>🗺️ ITINERARY_SYSTEM_PROMPT (Trip Planning)</summary>
+  <div class="details-content">
+    <p><strong>Additional Constraints vs. General Prompt:</strong></p>
+    <ul>
+      <li><strong>Max 3 Days:</strong> If user requests &gt;3 days, decline with a friendly apology — no JSON output.</li>
+      <li><strong>Realistic Timing:</strong> Must estimate activity durations and commute times between locations.</li>
+      <li><strong>Locally Curated Priority:</strong> Must prefer "locally curated" products when building itineraries.</li>
+      <li><strong>Day-by-Day JSON:</strong> Output schema includes <code>itinerary[].day</code>, <code>activities[].time</code>, <code>activities[].products[]</code> with full product card data.</li>
+    </ul>
+  </div>
+</details>
+
+<!-- ══════════════ 7. COST ESTIMATION ══════════════ -->
+<h2 id="cost"><span class="icon">💰</span> Cost Estimation</h2>
+
+<div class="card">
+  <h4>Per-Token Pricing (from <code>process_message()</code>)</h4>
+  <table class="comp-table">
+    <thead><tr><th>Model</th><th>Input (per 1M tokens)</th><th>Output (per 1M tokens)</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>Gemini 2.5 Flash</td><td>$0.075</td><td>$0.30</td><td><span class="badge badge-chosen">Primary</span></td></tr>
+      <tr><td>GPT-4o-mini</td><td>$0.15</td><td>$0.60</td><td><span class="badge badge-alt">Fallback</span></td></tr>
+      <tr><td>text-embedding-3-small</td><td>$0.02</td><td>—</td><td><span class="badge badge-alt">Embedding</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3>Interactive Cost Calculator</h3>
+<div class="card">
+  <div class="calc-row">
+    <label>Queries per month</label>
+    <input type="range" id="calcQueries" min="100" max="100000" value="10000" step="100">
+    <span class="calc-val" id="calcQueriesVal">10,000</span>
+  </div>
+  <div class="calc-row">
+    <label>Avg prompt tokens / query</label>
+    <input type="range" id="calcPrompt" min="200" max="5000" value="1500" step="100">
+    <span class="calc-val" id="calcPromptVal">1,500</span>
+  </div>
+  <div class="calc-row">
+    <label>Avg completion tokens / query</label>
+    <input type="range" id="calcCompletion" min="50" max="2000" value="400" step="50">
+    <span class="calc-val" id="calcCompletionVal">400</span>
+  </div>
+  <div class="calc-result">
+    <div>Estimated Monthly Cost (Gemini 2.5 Flash)</div>
+    <div class="big" id="calcTotal">$2.33</div>
+    <div style="color:var(--text-muted);font-size:12px;margin-top:4px" id="calcBreakdown">Input: $1.13 + Output: $1.20</div>
+  </div>
+</div>
+
+<div class="chart-container">
+  <div class="chart-title">Monthly Cost Comparison: Gemini Flash vs GPT-4o-mini</div>
+  <canvas id="costChart"></canvas>
+</div>
+
+<!-- ══════════════ 8. IMPROVEMENTS ══════════════ -->
+<h2 id="improvements"><span class="icon">🚀</span> Suggestions for Improvement</h2>
+<p>Prioritized improvements for evolving from MVP to production-grade.</p>
+
+<div class="card"><div class="improvement-card">
+  <div class="priority priority-high">1</div>
+  <div><h4>Streaming Responses (SSE)</h4><p>Currently, the entire LLM response is awaited before sending to the client. Implementing <strong>Server-Sent Events</strong> would deliver tokens in real-time, dramatically improving perceived latency. FastAPI supports <code>StreamingResponse</code> natively.</p></div>
+</div></div>
+
+<div class="card"><div class="improvement-card">
+  <div class="priority priority-high">2</div>
+  <div><h4>Conversation Memory</h4><p>No multi-turn context exists — each message is processed independently. Adding <strong>session-based chat history</strong> (Redis or in-memory with TTL) would enable follow-up questions like "tell me more about that" or "what about the pricing?".</p></div>
+</div></div>
+
+<div class="card"><div class="improvement-card">
+  <div class="priority priority-high">3</div>
+  <div><h4>Hybrid Search (Semantic + BM25)</h4><p>Pure semantic search can miss exact keyword matches (e.g., specific product names). Combining with <strong>BM25/keyword search</strong> and using Reciprocal Rank Fusion (RRF) would improve recall for both semantic and lexical queries.</p></div>
+</div></div>
+
+<div class="card"><div class="improvement-card">
+  <div class="priority priority-med">4</div>
+  <div><h4>Cross-Encoder Re-Ranking</h4><p>Add a <strong>re-ranking stage</strong> (e.g., Cohere Rerank, BGE Reranker) after initial bi-encoder retrieval. This refines the top-K results with much higher accuracy, improving answer quality with minimal latency cost.</p></div>
+</div></div>
+
+<div class="card"><div class="improvement-card">
+  <div class="priority priority-med">5</div>
+  <div><h4>Evaluation Framework (RAGAS)</h4><p>Implement automated evaluation using <strong>RAGAS</strong> (Retrieval-Augmented Generation Assessment) to measure faithfulness, answer relevancy, and context precision. Essential for data-driven prompt tuning.</p></div>
+</div></div>
+
+<div class="card"><div class="improvement-card">
+  <div class="priority priority-med">6</div>
+  <div><h4>Query & Response Caching</h4><p>Cache frequent or semantically similar queries to <strong>skip LLM calls entirely</strong>. Use a TTL-based cache (Redis) keyed on query embedding similarity. Could reduce LLM costs by 30-50% for common questions.</p></div>
+</div></div>
+
+<div class="card"><div class="improvement-card">
+  <div class="priority priority-med">7</div>
+  <div><h4>Observability (OpenTelemetry + LangSmith)</h4><p>Add structured logging, distributed tracing, and <strong>LLM observability</strong> (LangSmith or Langfuse) to monitor retrieval quality, prompt performance, latency distribution, and error rates in production.</p></div>
+</div></div>
+
+<div class="card"><div class="improvement-card">
+  <div class="priority priority-low">8</div>
+  <div><h4>Webhook-Based Ingestion</h4><p>Replace scheduled re-ingestion with <strong>CMS webhook triggers</strong> to auto-ingest when product pages are updated. Reduces stale content window from hours to seconds.</p></div>
+</div></div>
+
+<div class="card"><div class="improvement-card">
+  <div class="priority priority-low">9</div>
+  <div><h4>Rate Limiting & API Authentication</h4><p>Add API key authentication and rate limiting (per-IP and per-key) to protect against abuse. Use FastAPI middleware with <strong>SlowAPI</strong> or a reverse proxy (Nginx/Caddy) for rate limiting.</p></div>
+</div></div>
+
+<div class="card"><div class="improvement-card">
+  <div class="priority priority-low">10</div>
+  <div><h4>Chunk Overlap Tuning</h4><p>Current overlap (32 words) is a reasonable default but hasn't been empirically optimized. Run A/B tests with <strong>different overlap ratios</strong> (10%, 15%, 25%) and measure retrieval recall using a ground-truth Q&A dataset.</p></div>
+</div></div>
+
+<hr>
+<p style="text-align:center;color:var(--text-muted);font-size:12px;margin-top:40px">
+  Generated on March 15, 2026 · satusatu.com RAG Chatbot v1.0 · Built with ❤️
+</p>
+
+</main>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- SCRIPTS                                                      -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<script>
+// ── Mermaid Init ──
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    primaryColor: '#312e81',
+    primaryTextColor: '#e2e8f0',
+    primaryBorderColor: '#818cf8',
+    lineColor: '#6366f1',
+    secondaryColor: '#1e1b4b',
+    tertiaryColor: '#0f172a',
+    fontSize: '13px',
+    fontFamily: 'Inter, sans-serif'
+  },
+  flowchart: { curve: 'basis', padding: 16 }
+});
+
+// ── Active TOC highlight ──
+const tocLinks = document.querySelectorAll('.toc-list a');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      tocLinks.forEach(l => l.classList.remove('active'));
+      const id = entry.target.id;
+      const link = document.querySelector(`.toc-list a[href="#${id}"]`);
+      if (link) link.classList.add('active');
+    }
+  });
+}, { rootMargin: '-80px 0px -60% 0px' });
+document.querySelectorAll('h2[id], h3[id]').forEach(el => observer.observe(el));
+
+// ── Close sidebar on mobile nav ──
+tocLinks.forEach(l => l.addEventListener('click', () => {
+  document.querySelector('.sidebar').classList.remove('open');
+}));
+
+// ── Chunk Size Chart ──
+new Chart(document.getElementById('chunkChart'), {
+  type: 'line',
+  data: {
+    labels: ['64', '128', '256', '512', '768', '1024', '2048'],
+    datasets: [
+      {
+        label: 'Retrieval Precision',
+        data: [0.92, 0.90, 0.85, 0.78, 0.72, 0.65, 0.52],
+        borderColor: '#818cf8',
+        backgroundColor: 'rgba(129,140,248,0.1)',
+        fill: true, tension: 0.4
+      },
+      {
+        label: 'Context Completeness',
+        data: [0.45, 0.62, 0.78, 0.88, 0.92, 0.94, 0.96],
+        borderColor: '#34d399',
+        backgroundColor: 'rgba(52,211,153,0.1)',
+        fill: true, tension: 0.4
+      },
+      {
+        label: 'Embedding Quality',
+        data: [0.70, 0.82, 0.88, 0.83, 0.76, 0.68, 0.55],
+        borderColor: '#fbbf24',
+        backgroundColor: 'rgba(251,191,36,0.1)',
+        fill: true, tension: 0.4
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { labels: { color: '#94a3b8', font: { family: 'Inter' } } },
+      tooltip: { backgroundColor: '#1e1e2e', titleColor: '#e2e8f0', bodyColor: '#94a3b8', borderColor: '#2a2a3a', borderWidth: 1 }
+    },
+    scales: {
+      x: { title: { display: true, text: 'Chunk Size (words)', color: '#94a3b8' }, ticks: { color: '#636d83' }, grid: { color: '#1a1a25' } },
+      y: { title: { display: true, text: 'Score (0-1)', color: '#94a3b8' }, ticks: { color: '#636d83' }, grid: { color: '#1a1a25' }, min: 0, max: 1 }
+    }
+  }
+});
+
+// ── Cost Calculator ──
+const qSlider = document.getElementById('calcQueries');
+const pSlider = document.getElementById('calcPrompt');
+const cSlider = document.getElementById('calcCompletion');
+
+function updateCalc() {
+  const q = parseInt(qSlider.value);
+  const p = parseInt(pSlider.value);
+  const c = parseInt(cSlider.value);
+  document.getElementById('calcQueriesVal').textContent = q.toLocaleString();
+  document.getElementById('calcPromptVal').textContent = p.toLocaleString();
+  document.getElementById('calcCompletionVal').textContent = c.toLocaleString();
+
+  const inputCost = (q * p / 1_000_000) * 0.075;
+  const outputCost = (q * c / 1_000_000) * 0.30;
+  const total = inputCost + outputCost;
+
+  document.getElementById('calcTotal').textContent = '$' + total.toFixed(2);
+  document.getElementById('calcBreakdown').textContent = `Input: $${inputCost.toFixed(2)} + Output: $${outputCost.toFixed(2)}`;
+}
+qSlider.addEventListener('input', updateCalc);
+pSlider.addEventListener('input', updateCalc);
+cSlider.addEventListener('input', updateCalc);
+updateCalc();
+
+// ── Cost Comparison Chart ──
+const queryVolumes = [1000, 5000, 10000, 25000, 50000, 100000];
+const geminiCosts = queryVolumes.map(q => ((q * 1500 / 1e6) * 0.075 + (q * 400 / 1e6) * 0.30).toFixed(2));
+const gptCosts = queryVolumes.map(q => ((q * 1500 / 1e6) * 0.15 + (q * 400 / 1e6) * 0.60).toFixed(2));
+
+new Chart(document.getElementById('costChart'), {
+  type: 'bar',
+  data: {
+    labels: queryVolumes.map(q => (q/1000)+'K'),
+    datasets: [
+      { label: 'Gemini 2.5 Flash', data: geminiCosts, backgroundColor: 'rgba(129,140,248,0.7)', borderColor: '#818cf8', borderWidth: 1 },
+      { label: 'GPT-4o-mini', data: gptCosts, backgroundColor: 'rgba(248,113,113,0.5)', borderColor: '#f87171', borderWidth: 1 }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { labels: { color: '#94a3b8', font: { family: 'Inter' } } },
+      tooltip: {
+        backgroundColor: '#1e1e2e', titleColor: '#e2e8f0', bodyColor: '#94a3b8',
+        callbacks: { label: (ctx) => `${ctx.dataset.label}: $${ctx.raw}` }
+      }
+    },
+    scales: {
+      x: { title: { display: true, text: 'Monthly Queries', color: '#94a3b8' }, ticks: { color: '#636d83' }, grid: { color: '#1a1a25' } },
+      y: { title: { display: true, text: 'Monthly Cost (USD)', color: '#94a3b8' }, ticks: { color: '#636d83', callback: v => '$'+v }, grid: { color: '#1a1a25' } }
+    }
+  }
+});
+</script>
+</body>
+</html>
