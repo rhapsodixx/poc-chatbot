@@ -39,10 +39,12 @@ STRICT RULES for Itineraries:
    - Estimate the duration for each activity based on the nature of the product.
    - You MUST account for realistic commute/travel times between consecutive locations.
 4. If the Context does not contain enough information to create a meaningful itinerary, you MUST reply with EXACTLY the string: TRIGGER_HANDOFF
-5. TAG EXTRACTION: As you evaluate each product for the itinerary activities, explicitly extract and assign relevant tags to it. 
+5. PRODUCT VALIDATION: You MUST ONLY recommend products if their specific product page chunk is present in the Context. This means the [Source URL: ...] for the product MUST be a specific catalog URL (e.g., containing "/catalog/"). Do NOT recommend a product if you only see it listed on a general page or homepage.
+6. LOCALLY CURATED PRIORITY: When selecting products for the itinerary, you MUST prioritize recommending products that contain the exact string "locally curated" in their Context. You should only suggest alternative, non-curated products if a "locally curated" option is unavailable, or if it does not logically fit within the geographical routing and time schedule of the itinerary.
+7. TAG EXTRACTION: As you evaluate each product for the itinerary activities, explicitly extract and assign relevant tags to it. 
    - For "locally curated": You MUST ONLY assign this tag if the product's Context contains the EXACT string "locally curated".
    - For "kids friendly", "family friendly", or "pets friendly": Assign these tags if the product mentions or fits those specific criteria.
-6. FORMATTING ITINERARY SUGGESTIONS: You MUST output a structured JSON block at the very end of your response wrapped in ```json tags.
+8. FORMATTING ITINERARY SUGGESTIONS: You MUST output a structured JSON block at the very end of your response wrapped in ```json tags.
    - Text portion: Write a short, friendly preamble (e.g., "Here is a suggested itinerary for your trip:"). Do NOT mention specific products or schedules in this text portion! Do NOT use bullet points in the text portion!
    - JSON portion: You MUST include the JSON block populated with the itinerary details.
    The JSON must follow this exact schema:
@@ -69,7 +71,7 @@ STRICT RULES for Itineraries:
                    "current": "IDR 350,000",
                    "discountBadge": "-63%"
                  }},
-                 "productUrl": "Target URL mapped EXACTLY from the [Source URL: ...] tag in the context chunk",
+                 "productUrl": "Target URL mapped EXACTLY from the [Source URL: ...] tag in the specific product's context chunk",
                  "tags": ["extracted tag 1", "extracted tag 2"]
                }}
              ]
@@ -93,15 +95,16 @@ STRICT RULES:
 6. When mentioning products or attractions, include relevant details like pricing if available.
 7. PRIORITY RULE: If the user asks for "unique", "best", "recommended" attractions, or similar subjective inquiries, you MUST prioritize and suggest the products with the highest `rating` AND the highest `soldCount` from the provided Context.
 8. MINIMUM SOLD THRESHOLD: You MUST NOT suggest highly-rated products if their `soldCount` is very low (specifically, less than 100 units sold). High ratings must be backed by a minimum sales volume to be considered a top recommendation.
+9. PRODUCT VALIDATION: You MUST ONLY recommend products if their specific product page chunk is present in the Context. This means the [Source URL: ...] for the product MUST be a specific catalog URL (e.g., containing "/catalog/"). Do NOT extract or recommend products from general listing pages or the homepage.
 
 KEYWORD MATCHING & COMPREHENSIVE RECOMMENDATIONS:
-9. If the user query implies specific categories like "kids friendly", "family friendly", or "pets friendly", you MUST return ALL products from the Context that match these categories. Do NOT limit your recommendations to just 1 or 2 products if more valid matches are available in the Context.
-10. TAG EXTRACTION: As you evaluate each product, explicitly extract and assign relevant tags to it. 
+10. If the user query implies specific categories like "kids friendly", "family friendly", or "pets friendly", you MUST return ALL products from the Context that match these categories. Do NOT limit your recommendations to just 1 or 2 products if more valid matches are available in the Context.
+11. TAG EXTRACTION: As you evaluate each product, explicitly extract and assign relevant tags to it. 
     - For "locally curated": You MUST ONLY assign this tag if the product's Context contains the EXACT string "locally curated".
     - For "kids friendly", "family friendly", or "pets friendly": Assign these tags if the product mentions or fits those specific criteria.
 
 FORMATTING PRODUCT SUGGESTIONS: 
-11. If the context contains products or tickets, you MUST output a structured JSON block at the very end of your response wrapped in ```json tags containing the items.
+12. If the context contains products or tickets, you MUST output a structured JSON block at the very end of your response wrapped in ```json tags containing the items.
    - Text portion: Write a short, friendly, and conversational preamble (e.g., "Here are some top-rated tickets you might like for your trip:"). Do NOT mention specific product titles, prices, or ratings in this text portion! Do NOT use bullet points in the text portion!
    - JSON portion: You MUST include the JSON block populated with the product details.
    The JSON must follow this exact schema:
@@ -119,7 +122,7 @@ FORMATTING PRODUCT SUGGESTIONS:
            "current": "IDR 350,000",
            "discountBadge": "-63%"
          }},
-         "productUrl": "Target URL mapped EXACTLY from the [Source URL: ...] tag in the context chunk",
+         "productUrl": "Target URL mapped EXACTLY from the [Source URL: ...] tag in the specific product's context chunk",
          "tags": ["extracted tag 1", "extracted tag 2"]
        }}
      ]
@@ -180,9 +183,10 @@ async def retrieve_context(query: str) -> tuple[str, float, list[dict]]:
     """
     settings = get_settings()
 
+    # Fetch extra chunks to account for potentially filtered homepage chunks
     results = await query_similar(
         query_text=query,
-        n_results=settings.max_retrieved_chunks,
+        n_results=settings.max_retrieved_chunks + 3,
     )
 
     if not results["documents"] or not results["documents"][0]:
@@ -195,20 +199,33 @@ async def retrieve_context(query: str) -> tuple[str, float, list[dict]]:
     # ChromaDB cosine distance: 0 = identical, 2 = opposite
     # Convert to similarity: 1 - (distance / 2)
     similarities = [1 - (d / 2) for d in distances]
-    best_similarity = max(similarities) if similarities else 0.0
-
+    
     # Combine top documents into context
     context_parts = []
     sources = []
+    best_similarity = 0.0
+    valid_count = 0
+    
     for doc, sim, meta in zip(documents, similarities, metadatas):
+        url = meta.get("url", "")
+        # Filter out homepage chunks to prevent LLM from extracting products without proper catalog URLs/images
+        if url.endswith("/en-US") or url.endswith("/id-ID") or url.endswith(".com") or url.endswith(".com/"):
+            continue
+
+        if sim > best_similarity:
+            best_similarity = sim
+
         if sim >= settings.similarity_threshold:
-            url = meta.get("url", "")
             img_url = meta.get("image_url", "")
             title = meta.get("title", "")
             
             chunk_text = f"[Source URL: {url}]\n[Image URL: {img_url}]\n[Title: {title}]\n{doc}"
             context_parts.append(chunk_text)
             sources.append(meta)
+            
+            valid_count = valid_count + 1
+            if valid_count >= settings.max_retrieved_chunks:
+                break
 
     combined_context = "\n\n---\n\n".join(context_parts)
 
