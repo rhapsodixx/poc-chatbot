@@ -396,7 +396,7 @@ def upsert_chunks(chunks: list[TextChunk]) -> int:
         )
         total_upserted += len(batch)
         logger.info(f"Upserted batch {i // batch_size + 1} ({len(batch)} chunks)")
-        time.sleep(0.05)  # Yield slightly if running synchronously, though inside to_thread this just slows the thread
+        time.sleep(0.01)  # Yield slightly if running synchronously, though inside to_thread this just slows the thread
 
     logger.info(f"Total upserted component: {total_upserted} chunks")
     return total_upserted
@@ -457,23 +457,17 @@ async def run_ingestion(
                     if stored_hash and page.content_hash == stored_hash:
                         logger.debug(f"Skipping {url} — content hash unchanged")
                         progress["pages_skipped"] += 1
-                        return []
+                        return url, []
 
                     # Offload regex chunking to background thread
                     chunks = await asyncio.to_thread(chunk_text, page)  # type: ignore
                     
                     if chunks:
-                        # Ensure we don't have duplicates for this URL
-                        await asyncio.to_thread(delete_by_url, url)  # type: ignore
-                        # Streaming Upsert (offloaded to thread to avoid halting event loop)
-                        upserted_count = await asyncio.to_thread(upsert_chunks, chunks)  # type: ignore
-                        
                         progress["pages_processed"] += 1
                         progress["total_chunks"] += len(chunks)
-                        progress["chunks_upserted"] += upserted_count
                         
-                    return chunks
-                return []
+                    return url, chunks
+                return url, []
             except Exception as e:
                 logger.error(f"Error processing {url}: {e}")
                 return e
@@ -488,7 +482,30 @@ async def run_ingestion(
         tasks = [process_url(url, lastmod, stored_hash, client) for url, lastmod, stored_hash in urls_to_process]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    pages_failed: int = sum(1 for r in results if isinstance(r, Exception))
+    pages_failed = 0
+    all_chunks = []
+    urls_to_update = set()
+    
+    for r in results:
+        if isinstance(r, Exception):
+            pages_failed += 1
+            logger.error(f"Page processing failed: {r}")
+        else:
+            url, chunks = r
+            if chunks:
+                all_chunks.extend(chunks)
+                urls_to_update.add(url)
+                
+    if all_chunks:
+        logger.info(f"Globally batch-updating {len(urls_to_update)} URLs with {len(all_chunks)} chunks total...")
+        
+        # 1. Delete old chunks for updated URLs
+        for url in urls_to_update:
+            delete_by_url(url)
+            
+        # 2. Globally upsert all new chunks
+        upserted_count = upsert_chunks(all_chunks)
+        progress["chunks_upserted"] = upserted_count
 
     # Step 5: Clean up stale URLs
     discovered_urls = set(url_manifest.keys())
